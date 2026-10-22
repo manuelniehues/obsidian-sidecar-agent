@@ -2,9 +2,12 @@
 .sidecar-agent-panel {
   display: flex;
   flex-direction: column;
-  padding: 0 !important;
-  overflow: hidden !important;
   height: 100%;
+}
+/* Beats the padding of .view-content through higher specificity */
+.workspace-leaf-content[data-type="sidecar-agent-panel"] > .view-content.sidecar-agent-panel {
+  padding: 0;
+  overflow: hidden;
 }
 .sidecar-agent-panel .sa-spacer {
   flex: 1;
@@ -210,9 +213,9 @@
   opacity: 0.5;
 }
 body.sa-resizing,
-body.sa-resizing * {
-  cursor: row-resize !important;
-  user-select: none !important;
+body.sa-resizing.sa-resizing * {
+  cursor: row-resize;
+  user-select: none;
 }
 
 /* ---------- middle: open sessions + terminal ---------- */
@@ -278,7 +281,7 @@ body.sa-resizing * {
   height: 100%;
 }
 .sidecar-agent-panel .sa-term-host .xterm .xterm-viewport {
-  background-color: var(--background-secondary) !important;
+  background-color: var(--background-secondary);
 }
 .sidecar-agent-panel .sa-empty {
   position: absolute;

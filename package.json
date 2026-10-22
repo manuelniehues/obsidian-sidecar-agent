@@ -1,6 +1,6 @@
 {
   "name": "obsidian-sidecar-agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Obsidian plugin: Claude Code and Antigravity in a real terminal in the sidebar.",
   "private": true,
   "license": "MIT",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Styles no longer use `!important`.
+
 ## 1.0.0
 
 First public release.
