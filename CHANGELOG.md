@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- The note context follows the open note when it or its folder is renamed.
+
 ## 1.0.1
 
 - Styles no longer use `!important`.

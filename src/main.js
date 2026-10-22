@@ -340,9 +340,13 @@ export default class SidecarAgentPlugin extends Plugin {
     };
     this.registerEvent(this.app.workspace.on("file-open", update));
     this.registerEvent(
-      this.app.workspace.on("rename", (f, old) => {
-        if (old !== this.ctxPath) return;
-        this.ctxPath = f.path;
+      // Renames come from the vault, not the workspace. A renamed folder moves the note too.
+      this.app.vault.on("rename", (f, old) => {
+        const p = this.ctxPath;
+        if (!p) return;
+        if (p === old) this.ctxPath = f.path;
+        else if (p.startsWith(old + "/")) this.ctxPath = f.path + p.slice(old.length);
+        else return;
         this.writeNoteContext();
       }),
     );
