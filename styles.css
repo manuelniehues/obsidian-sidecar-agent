@@ -1,0 +1,606 @@
+/* ================= Sidecar Agent: panel in the right sidebar ================= */
+.sidecar-agent-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden !important;
+  height: 100%;
+}
+.sidecar-agent-panel .sa-spacer {
+  flex: 1;
+}
+.sidecar-agent-panel .sa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  height: auto;
+  font-size: var(--font-ui-smaller);
+}
+/* New-session buttons in the toolbar: subtle, accent only as a tint */
+.sidecar-agent-panel .sa-toolbar .sa-btn {
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-toolbar .sa-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.sidecar-agent-panel .sa-toolbar .sa-btn.mod-cta {
+  background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
+  color: var(--text-accent);
+}
+.sidecar-agent-panel .sa-toolbar .sa-btn.mod-cta:hover {
+  background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+.sidecar-agent-panel .sa-btn-icon {
+  display: inline-flex;
+}
+.sidecar-agent-panel .sa-btn-icon svg,
+.sidecar-agent-panel .sa-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.sidecar-agent-panel .sa-icon-btn {
+  padding: 3px;
+  height: auto;
+}
+
+/* ---------- top: sessions ---------- */
+.sidecar-agent-panel .sa-top {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.sidecar-agent-panel .sa-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 3px;
+}
+.sidecar-agent-panel .sa-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+}
+.sidecar-agent-panel .sa-search input[type="search"] {
+  flex: 1;
+  min-width: 0;
+}
+.sidecar-agent-panel .sa-ft {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-list-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sidecar-agent-panel .sa-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 8px 4px;
+}
+.sidecar-agent-panel .sa-chip {
+  padding: 1px 8px;
+  height: auto;
+  font-size: var(--font-ui-smaller);
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+  box-shadow: none;
+}
+.sidecar-agent-panel .sa-chip.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.sidecar-agent-panel .sa-status {
+  padding: 0 10px 2px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+.sidecar-agent-panel .sa-status.is-empty {
+  display: none;
+}
+.sidecar-agent-panel .sa-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 4px 6px;
+}
+.sidecar-agent-panel .sa-group {
+  margin: 8px 6px 2px;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sidecar-agent-panel .sa-item {
+  display: flex;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.sidecar-agent-panel .sa-item:hover {
+  background: var(--background-modifier-hover);
+}
+.sidecar-agent-panel .sa-item.is-open {
+  box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-item.is-active {
+  background: var(--background-modifier-active-hover);
+}
+.sidecar-agent-panel .sa-icon {
+  flex: none;
+  padding-top: 2px;
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-claude .sa-icon,
+.sidecar-agent-panel .sa-tab .sa-tab-icon,
+.sidecar-agent-panel .sa-info-icon {
+  color: #d97757;
+}
+.sidecar-agent-panel .sa-agy .sa-icon {
+  color: #4f8df5;
+}
+.sidecar-agent-panel .sa-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.sidecar-agent-panel .sa-body {
+  min-width: 0;
+  flex: 1;
+}
+.sidecar-agent-panel .sa-title {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-meta {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-badge {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-badge.is-open {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.sidecar-agent-panel .sa-more {
+  display: block;
+  margin: 6px auto;
+  font-size: var(--font-ui-smaller);
+}
+
+/* ---------- splitters ---------- */
+.sidecar-agent-panel .sa-split {
+  flex: none;
+  height: 5px;
+  cursor: row-resize;
+  border-top: 1px solid var(--background-modifier-border);
+  background: transparent;
+}
+.sidecar-agent-panel .sa-split:hover {
+  background: var(--interactive-accent);
+  opacity: 0.5;
+}
+body.sa-resizing,
+body.sa-resizing * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+/* ---------- middle: open sessions + terminal ---------- */
+.sidecar-agent-panel .sa-tabs {
+  flex: none;
+  display: flex;
+  gap: 3px;
+  padding: 3px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sidecar-agent-panel .sa-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 180px;
+  padding: 2px 4px 2px 7px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  cursor: pointer;
+  flex: none;
+}
+.sidecar-agent-panel .sa-tab.is-active {
+  color: var(--text-normal);
+  background: var(--background-primary);
+  box-shadow: inset 0 -1px 0 var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-tab-icon svg,
+.sidecar-agent-panel .sa-tab-close svg {
+  width: 12px;
+  height: 12px;
+}
+.sidecar-agent-panel .sa-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-tab:not(.is-running) .sa-tab-title {
+  font-style: italic;
+}
+.sidecar-agent-panel .sa-tab-close {
+  display: inline-flex;
+  opacity: 0.5;
+  border-radius: 3px;
+}
+.sidecar-agent-panel .sa-tab-close:hover {
+  opacity: 1;
+  background: var(--background-modifier-border);
+}
+.sidecar-agent-panel .sa-term-area {
+  flex: 1;
+  min-height: 80px;
+  position: relative;
+  background: var(--background-secondary);
+}
+.sidecar-agent-panel .sa-term-host {
+  position: absolute;
+  inset: 3px 2px 2px 6px;
+}
+.sidecar-agent-panel .sa-term-host .xterm {
+  height: 100%;
+}
+.sidecar-agent-panel .sa-term-host .xterm .xterm-viewport {
+  background-color: var(--background-secondary) !important;
+}
+.sidecar-agent-panel .sa-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.sidecar-agent-panel .sa-empty-hint {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* ---------- bottom: info + actions ---------- */
+.sidecar-agent-panel .sa-bottom {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px 6px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.sidecar-agent-panel .sa-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-info-icon svg {
+  width: 13px;
+  height: 13px;
+}
+.sidecar-agent-panel .sa-info-name {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+.sidecar-agent-panel .sa-info-name:hover {
+  text-decoration: underline;
+}
+.sidecar-agent-panel .sa-info-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-info-muted {
+  color: var(--text-faint);
+}
+.sidecar-agent-panel .sa-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.sidecar-agent-panel .sa-dot.is-running {
+  background: var(--color-green);
+}
+.sidecar-agent-panel .sa-dot.is-exited {
+  background: var(--color-orange);
+}
+.sidecar-agent-panel .sa-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- dialogs ---------- */
+.sidecar-agent-modal .sa-prompt-setting {
+  flex-direction: column;
+  align-items: stretch;
+}
+.sidecar-agent-modal .sa-prompt-setting .setting-item-control textarea {
+  width: 100%;
+  min-height: 90px;
+}
+
+/* Obsidian's status bar floats over the bottom right of the sidebar (position: fixed, about 32 px) */
+.mod-right-split .sidecar-agent-panel .sa-bottom {
+  padding-bottom: 36px;
+}
+
+/* Model and effort switches in the info line */
+.sidecar-agent-panel .sa-info {
+  flex-wrap: wrap;
+  row-gap: 3px;
+}
+.sidecar-agent-panel .sa-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: auto;
+  padding: 1px 5px 1px 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  box-shadow: none;
+  border-radius: 10px;
+}
+.sidecar-agent-panel .sa-chip-btn:hover {
+  background: var(--background-modifier-active-hover);
+}
+.sidecar-agent-panel .sa-chip-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-chip-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Focus lock in the info line */
+.sidecar-agent-panel .sa-lock {
+  margin-left: auto;
+  padding: 2px;
+  height: auto;
+  color: var(--text-faint);
+}
+.sidecar-agent-panel .sa-lock.is-on {
+  color: var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-lock svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Usage limits in the info line */
+.sidecar-agent-panel .sa-limit {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-limit.is-warn {
+  color: var(--color-orange);
+}
+.sidecar-agent-panel .sa-limit.is-crit {
+  color: var(--color-red);
+}
+.sidecar-agent-panel .sa-limit.is-wait {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  cursor: pointer;
+}
+
+/* Terminal ↔ reading view switch */
+.sidecar-agent-panel .sa-tabs {
+  align-items: center;
+}
+.sidecar-agent-panel .sa-viewswitch {
+  order: 99;
+  margin-left: auto;
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  padding: 1px;
+}
+.sidecar-agent-panel .sa-vs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: auto;
+  padding: 1px 7px;
+  font-size: var(--font-ui-smaller);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-vs-btn.is-active {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+  box-shadow:
+    0 0 0 1px var(--background-modifier-border),
+    0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.sidecar-agent-panel .sa-vs-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Reading view */
+.sidecar-agent-panel .sa-reader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-primary);
+}
+.sidecar-agent-panel .sa-reader-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 14px 16px;
+  /* Font from the plugin settings (variables set by applyReaderStyle), otherwise like notes */
+  --font-text: var(--sa-reader-font, var(--font-text-override), var(--font-text-theme), var(--font-default));
+  --line-height-normal: var(--sa-reader-line, 1.5);
+  font-family: var(--font-text);
+  font-size: var(--sa-reader-size, var(--font-text-size));
+  line-height: var(--line-height-normal);
+  user-select: text;
+  outline: none;
+}
+.sidecar-agent-panel .sa-reader-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+.sidecar-agent-panel .sa-reader-input {
+  flex: 1;
+  min-height: 32px;
+  max-height: 200px;
+  resize: none;
+  padding: 6px 8px;
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+}
+.sidecar-agent-panel .sa-reader-send {
+  flex: none;
+  height: 32px;
+}
+.sidecar-agent-panel .sa-reader .sa-turn {
+  margin: 0 0 14px;
+}
+.sidecar-agent-panel .sa-reader .sa-turn-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sidecar-agent-panel .sa-reader .sa-turn-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.sidecar-agent-panel .sa-reader .sa-turn-assistant .sa-turn-icon {
+  color: var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-reader .sa-turn-user .sa-turn-body {
+  padding: 4px 10px;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+.sidecar-agent-panel .sa-reader .sa-turn-body > div > :first-child,
+.sidecar-agent-panel .sa-reader .sa-turn-body > :first-child {
+  margin-top: 0;
+}
+.sidecar-agent-panel .sa-reader .sa-tools {
+  margin: 4px 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+.sidecar-agent-panel .sa-reader .sa-tools summary {
+  cursor: pointer;
+}
+.sidecar-agent-panel .sa-reader .sa-tools ul {
+  margin: 2px 0 4px;
+  font-family: var(--font-monospace);
+}
+.sidecar-agent-panel .sa-reader .sa-turn-error {
+  color: var(--color-orange);
+  font-size: var(--font-ui-small);
+}
+.sidecar-agent-panel .sa-reader .sa-reader-more,
+.sidecar-agent-panel .sa-reader .sa-reader-note {
+  margin: 4px 0 12px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* Note context in the info line */
+.sidecar-agent-panel .sa-ctx {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 160px;
+  padding: 1px 6px;
+  height: auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+.sidecar-agent-panel .sa-ctx.is-on {
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-ctx-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidecar-agent-panel .sa-ctx svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Text dialogs */
+.sidecar-agent-modal .sa-full-width {
+  width: 100%;
+}
+.sidecar-agent-modal .sa-grow {
+  flex: 1;
+}
