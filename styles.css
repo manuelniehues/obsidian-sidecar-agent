@@ -277,6 +277,25 @@ body.sa-resizing.sa-resizing * {
   position: absolute;
   inset: 3px 2px 2px 6px;
 }
+.sidecar-agent-panel .sa-jump-top {
+  position: absolute;
+  top: 6px;
+  right: 14px;
+  z-index: 10;
+  padding: 2px 10px;
+  height: auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s);
+  opacity: 0.9;
+}
+.sidecar-agent-panel .sa-jump-top:hover {
+  opacity: 1;
+  background: var(--background-modifier-hover);
+}
 .sidecar-agent-panel .sa-term-host .xterm {
   height: 100%;
 }

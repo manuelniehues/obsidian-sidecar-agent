@@ -83,6 +83,7 @@ const EN = {
   "term.openElsewhere": "This conversation is currently open in another program (PID {pid}, e.g. a terminal).",
   "term.openElsewhereHint": "Two processes on the same conversation overwrite each other's history. Exit it there, then press Enter here.",
   "term.startFailed": "Failed to start: {msg}",
+  "term.jumpTop": "↑ Jump to top",
   "term.ended": "Session ended · Enter: resume",
   "term.endedCode": "Session ended (code {code}) · Enter: resume",
 
@@ -313,6 +314,7 @@ const DE = {
   "term.openElsewhere": "Diese Unterhaltung ist gerade in einem anderen Programm offen (PID {pid}, z. B. ein Terminal).",
   "term.openElsewhereHint": "Zwei Prozesse auf derselben Unterhaltung schreiben sich gegenseitig in den Verlauf. Dort beenden, dann hier Enter drücken.",
   "term.startFailed": "Start fehlgeschlagen: {msg}",
+  "term.jumpTop": "↑ Zum Anfang",
   "term.ended": "Sitzung beendet · Enter: fortsetzen",
   "term.endedCode": "Sitzung beendet (Code {code}) · Enter: fortsetzen",
 

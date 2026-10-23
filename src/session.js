@@ -15,6 +15,23 @@ import { t } from "./i18n";
 // Resuming the same session waits for them, otherwise the old process would keep e.g. Remote Control.
 const EXITING = (window.__sidecarAgentExiting = window.__sidecarAgentExiting || new Map());
 
+// Claude Code's hint while scrolled up in its fullscreen view. It is drawn with a background
+// over the conversation text, so a plain text match alone could also hit normal output.
+const JUMP_HINT = /Jump to bottom|\d+ new messages?\b/;
+function hasJumpHint(line) {
+  if (!line) return false;
+  const m = JUMP_HINT.exec(line.translateToString(true));
+  if (!m) return false;
+  let pos = 0;
+  for (let x = 0; x < line.length; x++) {
+    const cell = line.getCell(x);
+    if (!cell || cell.getWidth() === 0) continue;
+    if (pos >= m.index) return !cell.isBgDefault();
+    pos += cell.getChars().length || 1;
+  }
+  return false;
+}
+
 function cssVar(name, fallback) {
   const v = getComputedStyle(document.body).getPropertyValue(name).trim();
   return v || fallback;
@@ -208,10 +225,31 @@ export class TerminalSession {
     this.term.attachCustomKeyEventHandler((ev) => this.handleKey(ev));
     this.term.onData((d) => this.input(d));
     this.term.onBinary((d) => this.input(Buffer.from(d, "binary")));
+    this.topBtn = this.el.createEl("button", { cls: "sa-jump-top", text: t("term.jumpTop") });
+    this.topBtn.hide();
+    this.topBtn.addEventListener("mousedown", (ev) => ev.preventDefault()); // keep the terminal focus
+    this.topBtn.addEventListener("click", () => {
+      this.input("\x1b[1;5H"); // Ctrl+Home = "scroll:top" in Claude Code's fullscreen view
+      this.term?.focus();
+    });
+    this.term.onRender(() => this.checkJumpSoon());
     this.resizeObs = new ResizeObserver(() => this.scheduleFit());
     this.resizeObs.observe(this.el);
     this.el.addEventListener("dragover", (ev) => ev.preventDefault());
     this.el.addEventListener("drop", (ev) => this.plugin.handleDrop(ev, (t) => this.sendText(t)));
+  }
+
+  /** Show "Jump to top" while Claude Code shows its own "Jump to bottom" hint (scrolled up). */
+  checkJumpSoon() {
+    if (this.jumpTimer) return;
+    this.jumpTimer = window.setTimeout(() => {
+      this.jumpTimer = 0;
+      if (!this.term || !this.topBtn) return;
+      const buf = this.term.buffer.active;
+      let found = false;
+      for (let y = buf.viewportY + this.term.rows - 1; y >= buf.viewportY && !found; y--) found = hasJumpHint(buf.getLine(y));
+      this.topBtn.toggle(found);
+    }, 150);
   }
 
   applyOptions() {
@@ -452,6 +490,7 @@ export class TerminalSession {
 
   dispose() {
     this.kill();
+    window.clearTimeout(this.jumpTimer);
     this.resizeObs?.disconnect();
     this.term?.dispose();
     this.term = null;

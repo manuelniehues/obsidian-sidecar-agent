@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- "Jump to top" button: while Claude Code shows its "Jump to bottom" hint after scrolling up, a button at the top right of the terminal jumps to the start of the conversation (Ctrl+Home).
+
 ## 1.0.2
 
 - The note context follows the open note when it or its folder is renamed.
