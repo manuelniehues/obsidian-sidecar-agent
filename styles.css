@@ -222,19 +222,19 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-tabs {
   flex: none;
   display: flex;
-  gap: 3px;
-  padding: 3px 6px;
+  gap: 4px;
+  padding: 4px 6px;
   overflow-x: auto;
   scrollbar-width: none;
 }
 .sidecar-agent-panel .sa-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 180px;
-  padding: 2px 4px 2px 7px;
+  gap: 5px;
+  max-width: 200px;
+  padding: 4px 5px 4px 9px;
   border-radius: var(--radius-s);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
   color: var(--text-muted);
   background: var(--background-modifier-hover);
   cursor: pointer;
@@ -247,8 +247,8 @@ body.sa-resizing.sa-resizing * {
 }
 .sidecar-agent-panel .sa-tab-icon svg,
 .sidecar-agent-panel .sa-tab-close svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 .sidecar-agent-panel .sa-tab-title {
   overflow: hidden;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Slightly larger session tabs (font, padding and icons).
+
 ## 1.1.0
 
 - "Jump to top" button: while Claude Code shows its "Jump to bottom" hint after scrolling up, a button at the top right of the terminal jumps to the start of the conversation (Ctrl+Home).
