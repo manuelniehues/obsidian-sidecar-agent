@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+- Agent colours in the toolbar and the session tabs: Claude keeps the accent colour, Antigravity uses a cold blue. The Antigravity tab icon is now blue instead of orange.
+
 ## 1.1.2
 
 - Session tabs look like the new-session buttons in the toolbar: outlined, the active tab tinted with the accent colour.

@@ -83,8 +83,8 @@ export class AgentPanelView extends ItemView {
       b.onclick = fn;
       return b;
     };
-    mk(AGENTS.claude.icon, "Claude", t("cmd.newClaude"), () => this.plugin.startNew({ agent: "claude" }), "mod-cta");
-    mk(AGENTS.agy.icon, "Antigravity", t("cmd.newAgy"), () => this.plugin.startNew({ agent: "agy" }));
+    mk(AGENTS.claude.icon, "Claude", t("cmd.newClaude"), () => this.plugin.startNew({ agent: "claude" }), "mod-cta sa-claude");
+    mk(AGENTS.agy.icon, "Antigravity", t("cmd.newAgy"), () => this.plugin.startNew({ agent: "agy" }), "mod-cta sa-agy");
     bar.createDiv({ cls: "sa-spacer" });
     iconBtn(bar, "sliders-horizontal", t("panel.newWithOptions"), () => this.plugin.openNewSessionModal({}));
     iconBtn(bar, "refresh-cw", t("panel.reload"), () => this.plugin.store.refresh());
@@ -352,7 +352,7 @@ export class AgentPanelView extends ItemView {
       mk("reader", "book-open", t("view.reader"), t("view.readerTip"));
     }
     for (const s of this.sessions) {
-      const tab = el.createDiv({ cls: `sa-tab${s === this.active ? " is-active" : ""}${s.running ? " is-running" : ""}` });
+      const tab = el.createDiv({ cls: `sa-tab sa-${s.st.agent}${s === this.active ? " is-active" : ""}${s.running ? " is-running" : ""}` });
       setIcon(tab.createSpan({ cls: "sa-tab-icon" }), AGENTS[s.st.agent]?.icon || "terminal");
       tab.createSpan({ cls: "sa-tab-title", text: s.title() });
       tab.setAttr("aria-label", `${s.title()} · ${this.stateLabel(s)}`);
