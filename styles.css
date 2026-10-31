@@ -236,14 +236,23 @@ body.sa-resizing.sa-resizing * {
   border-radius: var(--radius-s);
   font-size: var(--font-ui-small);
   color: var(--text-muted);
-  background: var(--background-modifier-hover);
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
   cursor: pointer;
   flex: none;
 }
-.sidecar-agent-panel .sa-tab.is-active {
+/* Same look as the new-session buttons in the toolbar, active tab tinted like mod-cta */
+.sidecar-agent-panel .sa-tab:hover {
+  background: var(--background-modifier-hover);
   color: var(--text-normal);
-  background: var(--background-primary);
-  box-shadow: inset 0 -1px 0 var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-tab.is-active {
+  background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
+  color: var(--text-accent);
+}
+.sidecar-agent-panel .sa-tab.is-active:hover {
+  background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
 }
 .sidecar-agent-panel .sa-tab-icon svg,
 .sidecar-agent-panel .sa-tab-close svg {

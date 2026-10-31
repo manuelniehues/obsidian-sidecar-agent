@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Session tabs look like the new-session buttons in the toolbar: outlined, the active tab tinted with the accent colour.
+
 ## 1.1.1
 
 - Slightly larger session tabs (font, padding and icons).
