@@ -34,20 +34,20 @@
   color: var(--text-normal);
 }
 .sidecar-agent-panel .sa-toolbar .sa-btn.mod-cta {
-  background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
-  border-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
-  color: var(--text-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 17%, transparent);
+  color: color-mix(in srgb, var(--text-accent) 70%, var(--text-muted));
 }
 .sidecar-agent-panel .sa-toolbar .sa-btn.mod-cta:hover {
-  background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
 }
 .sidecar-agent-panel .sa-toolbar .sa-btn.mod-cta.sa-agy {
-  background: color-mix(in srgb, var(--sa-agy-color) 11%, transparent);
-  border-color: color-mix(in srgb, var(--sa-agy-color) 28%, transparent);
-  color: var(--sa-agy-color);
+  background: color-mix(in srgb, var(--sa-agy-color) 6%, transparent);
+  border-color: color-mix(in srgb, var(--sa-agy-color) 17%, transparent);
+  color: color-mix(in srgb, var(--sa-agy-color) 70%, var(--text-muted));
 }
 .sidecar-agent-panel .sa-toolbar .sa-btn.mod-cta.sa-agy:hover {
-  background: color-mix(in srgb, var(--sa-agy-color) 20%, transparent);
+  background: color-mix(in srgb, var(--sa-agy-color) 11%, transparent);
 }
 .sidecar-agent-panel .sa-btn-icon {
   display: inline-flex;
@@ -258,20 +258,20 @@ body.sa-resizing.sa-resizing * {
   color: var(--text-normal);
 }
 .sidecar-agent-panel .sa-tab.is-active {
-  background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
-  border-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
-  color: var(--text-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 17%, transparent);
+  color: color-mix(in srgb, var(--text-accent) 70%, var(--text-muted));
 }
 .sidecar-agent-panel .sa-tab.is-active:hover {
-  background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
 }
 .sidecar-agent-panel .sa-tab.sa-agy.is-active {
-  background: color-mix(in srgb, var(--sa-agy-color) 11%, transparent);
-  border-color: color-mix(in srgb, var(--sa-agy-color) 28%, transparent);
-  color: var(--sa-agy-color);
+  background: color-mix(in srgb, var(--sa-agy-color) 6%, transparent);
+  border-color: color-mix(in srgb, var(--sa-agy-color) 17%, transparent);
+  color: color-mix(in srgb, var(--sa-agy-color) 70%, var(--text-muted));
 }
 .sidecar-agent-panel .sa-tab.sa-agy.is-active:hover {
-  background: color-mix(in srgb, var(--sa-agy-color) 20%, transparent);
+  background: color-mix(in srgb, var(--sa-agy-color) 11%, transparent);
 }
 .sidecar-agent-panel .sa-tab-icon svg,
 .sidecar-agent-panel .sa-tab-close svg {

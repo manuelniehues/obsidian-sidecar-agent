@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.5
+
+- Subtler agent colours: the new-session buttons in the toolbar and the active session tab use a lighter tint, a fainter border and a muted text colour.
+
 ## 1.1.4
 
 - The panel follows Claude Code to the new session after `/clear` or an in-app `/resume`. Before, the reading view, the tab and "resume after restart" stayed on the old session. A SessionStart hook (plugin sessions only) reports the current session id.
