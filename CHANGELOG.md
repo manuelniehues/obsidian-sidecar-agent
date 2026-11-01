@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.4
+
+- The panel follows Claude Code to the new session after `/clear` or an in-app `/resume`. Before, the reading view, the tab and "resume after restart" stayed on the old session. A SessionStart hook (plugin sessions only) reports the current session id.
+
 ## 1.1.3
 
 - Agent colours in the toolbar and the session tabs: Claude keeps the accent colour, Antigravity uses a cold blue. The Antigravity tab icon is now blue instead of orange.

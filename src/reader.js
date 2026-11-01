@@ -138,6 +138,18 @@ export class SessionReader {
   update(first) {
     if (this.s.st.agent !== "claude") return this.showNote(t("reader.onlyClaude"));
     const f = this.file;
+    if (f !== this.shownFile) {
+      // session switched (/clear, /resume): start over with the new history
+      this.shownFile = f;
+      this.noteMsg = null;
+      this.scroll.empty();
+      this.turns = [];
+      this.offset = null;
+      this.rest = "";
+      this.skipPartial = false;
+      this.truncated = false;
+      first = true;
+    }
     if (!f || !fs.existsSync(f)) return this.showNote(t("reader.noHistory"));
     let size;
     try {

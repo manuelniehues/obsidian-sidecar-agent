@@ -8,7 +8,9 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebglAddon } from "@xterm/addon-webgl";
 import PTY_HELPER from "./py/pty_helper.py";
-import { AGENTS, buildEnv, mention } from "./util";
+import fs from "fs";
+import path from "path";
+import { AGENTS, CACHE_DIR, buildEnv, mention } from "./util";
 import { t } from "./i18n";
 
 // Processes that are shutting down. Kept on window so it survives a plugin reload.
@@ -404,7 +406,9 @@ export class TerminalSession {
     const pretty = [cmd.bin.replace(os.homedir(), "~"), ...cmd.args.map((a) => (/[\s"']/.test(a) ? JSON.stringify(a.length > 50 ? a.slice(0, 47) + "…" : a) : a))].join(" ");
     this.term.write(`\x1b[2m▶ ${pretty}\x1b[0m\r\n`);
     const argv = ["-I", "-B", "-c", PTY_HELPER, String(rows), String(cols), shell, "-l", "-c", 'exec "$@"', "sidecar-agent", cmd.bin, ...cmd.args];
-    const proc = spawn(py, argv, { cwd: this.plugin.vaultPath, env: buildEnv(this.plugin.agentEnv()), stdio: ["pipe", "pipe", "pipe", "pipe"] });
+    const env = this.plugin.agentEnv();
+    if (this.st.agent === "claude") env.SIDECAR_AGENT_SESSION_FILE = this.watchSessionFile();
+    const proc = spawn(py, argv, { cwd: this.plugin.vaultPath, env: buildEnv(env), stdio: ["pipe", "pipe", "pipe", "pipe"] });
     this.proc = proc;
     this.startedAt = Date.now();
     this.readyAt = 0;
@@ -488,8 +492,43 @@ export class TerminalSession {
     }, 12000);
   }
 
+  /** Per-terminal file the SessionStart hook writes the current Claude session id to (see session_hook.py). */
+  watchSessionFile() {
+    const file = path.join(CACHE_DIR, `session-${process.pid}-${this.uid}.json`);
+    if (this.sessionFile === file) return file;
+    this.unwatchSessionFile();
+    try {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+      fs.rmSync(file, { force: true });
+    } catch {
+      // not critical: without the file the panel simply keeps the old id
+    }
+    this.sessionFile = file;
+    fs.watchFile(file, { interval: 1000 }, () => {
+      try {
+        const id = JSON.parse(fs.readFileSync(file, "utf8")).session_id;
+        if (id && id !== this.st.sessionId && this.st.agent === "claude") this.setSessionId(id);
+      } catch {
+        // file missing or half written: next change
+      }
+    });
+    return file;
+  }
+
+  unwatchSessionFile() {
+    if (!this.sessionFile) return;
+    fs.unwatchFile(this.sessionFile);
+    try {
+      fs.rmSync(this.sessionFile, { force: true });
+    } catch {
+      // already gone
+    }
+    this.sessionFile = null;
+  }
+
   dispose() {
     this.kill();
+    this.unwatchSessionFile();
     window.clearTimeout(this.jumpTimer);
     this.resizeObs?.disconnect();
     this.term?.dispose();

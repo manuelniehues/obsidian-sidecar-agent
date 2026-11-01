@@ -8,6 +8,7 @@ import path from "path";
 import { SessionStore } from "./store";
 import STATUSLINE_PY from "./py/statusline.py";
 import CONTEXT_HOOK_PY from "./py/context_hook.py";
+import SESSION_HOOK_PY from "./py/session_hook.py";
 import { AgentPanelView, VIEW_PANEL } from "./panel-view";
 import { isDarkTheme, obsidianAccent } from "./session";
 import { ConfirmModal, EFFORTS, NewSessionModal, TextModal } from "./modals";
@@ -208,6 +209,9 @@ export default class SidecarAgentPlugin extends Plugin {
       // The hook is always installed; it reads the on/off switch from the context file at every message.
       const hook = this.writeHelperScript("context_hook.py", CONTEXT_HOOK_PY);
       if (hook) extra.hooks = { UserPromptSubmit: [{ hooks: [{ type: "command", command: hook, timeout: 5 }] }] };
+      // Reports the session id after /clear or an in-app /resume, so the panel follows the new session.
+      const sHook = this.writeHelperScript("session_hook.py", SESSION_HOOK_PY);
+      if (sHook) (extra.hooks ||= {}).SessionStart = [{ hooks: [{ type: "command", command: sHook, timeout: 5 }] }];
       if (s.claudeTheme === "ansi") extra.theme = this.writeClaudeTheme() || (isDarkTheme() ? "dark-ansi" : "light-ansi");
       args.push("--settings", JSON.stringify(extra));
       if (s.claudePermissionMode) args.push("--permission-mode", s.claudePermissionMode);
