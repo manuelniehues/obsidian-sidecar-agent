@@ -13,7 +13,7 @@ import { AgentPanelView, VIEW_PANEL } from "./panel-view";
 import { isDarkTheme, obsidianAccent } from "./session";
 import { ConfirmModal, EFFORTS, NewSessionModal, TextModal } from "./modals";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
-import { AGY_DB, CACHE_DIR, SUPPORT_DIR, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
+import { AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
 
 const THEME_NAME = "sidecar-agent";
@@ -122,6 +122,8 @@ export default class SidecarAgentPlugin extends Plugin {
     this.pending = new Map(); // scheduled resumes per session key
     this.registerInterval(window.setInterval(() => this.tickLimits(), 30000));
     this.watchContext();
+    this.agyCtx = new Map(); // conversation id → {mtime, rec}
+    this.registerInterval(window.setInterval(() => this.pollAgyContext(), 5000));
     this.setupFocusLock();
     this.registerEvent(this.app.workspace.on("css-change", () => this.writeClaudeTheme()));
     this.app.workspace.onLayoutReady(() => this.setupNoteContext());
@@ -418,6 +420,58 @@ export default class SidecarAgentPlugin extends Plugin {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Antigravity: tokens in the context after the last model response, from the conversation transcript
+   * (brain/<id>/.system_generated/logs/transcript.jsonl, input_tokens + cache_read_tokens). agy reports
+   * no context window size, so there is no percentage. Cached by file mtime.
+   */
+  readAgyContext(id) {
+    if (!id) return null;
+    const f = path.join(AGY_DIR, "brain", id, ".system_generated", "logs", "transcript.jsonl");
+    let st;
+    try {
+      st = fs.statSync(f);
+    } catch {
+      return null;
+    }
+    const hit = this.agyCtx.get(id);
+    if (hit && hit.mtime === st.mtimeMs) return hit.rec;
+    let rec = null;
+    try {
+      const len = Math.min(st.size, 256 * 1024);
+      const fd = fs.openSync(f, "r");
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, st.size - len);
+      fs.closeSync(fd);
+      const lines = buf.toString("utf8").split("\n");
+      for (let i = lines.length - 1; i >= 0 && !rec; i--) {
+        if (!lines[i].includes('"input_tokens"')) continue;
+        try {
+          const d = JSON.parse(lines[i]);
+          if (d.input_tokens != null) rec = { at: Date.parse(d.created_at) || st.mtimeMs, used_tokens: (d.input_tokens || 0) + (d.cache_read_tokens || 0) };
+        } catch {
+          // first line of the chunk may be cut off
+        }
+      }
+    } catch (e) {
+      console.warn("[sidecar-agent] agy context", e);
+    }
+    this.agyCtx.set(id, { mtime: st.mtimeMs, rec });
+    return rec;
+  }
+
+  /** Every 5 s: refresh the info line when the transcript of a running Antigravity session changed. */
+  pollAgyContext() {
+    let changed = false;
+    for (const s of this.terminals) {
+      if (s.st.agent !== "agy" || !s.running || !s.st.sessionId) continue;
+      const before = this.agyCtx.get(s.st.sessionId)?.mtime;
+      this.readAgyContext(s.st.sessionId);
+      if (this.agyCtx.get(s.st.sessionId)?.mtime !== before) changed = true;
+    }
+    if (changed) this.trigger("context-changed");
   }
 
   /** Watches the context files so the info line updates right after each answer; removes files older than 14 days. */

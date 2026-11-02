@@ -143,6 +143,7 @@ const EN = {
 
   "limits.week": "week",
   "context.short": "ctx",
+  "context.tipAgy": "Context: {used} tokens after the last answer. Antigravity does not report the size of the context window, so no percentage.",
   "context.tip": "Context window: {pct} % used ({used} of {size} tokens). Claude Code compacts automatically when it gets full, /compact does it now.",
   "limits.claudePlan": "Claude plan",
   "limits.tip": "{label}: used 5 h {five} (reset {fiveAt}), week {week} (reset {weekAt})",
@@ -376,6 +377,7 @@ const DE = {
 
   "limits.week": "Woche",
   "context.short": "Kontext",
+  "context.tipAgy": "Kontext: {used} Tokens nach der letzten Antwort. Antigravity nennt die Größe des Kontextfensters nicht, deshalb ohne Prozentwert.",
   "context.tip": "Kontextfenster: {pct} % belegt ({used} von {size} Tokens). Claude Code verdichtet automatisch, wenn es voll wird, /compact sofort.",
   "limits.claudePlan": "Claude-Abo",
   "limits.tip": "{label}: verbraucht 5 h {five} (Reset {fiveAt}), Woche {week} (Reset {weekAt})",

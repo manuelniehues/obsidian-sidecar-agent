@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+
+- Context size for Antigravity sessions in the info line: tokens in the context after the last answer, read from the conversation transcript (`input_tokens + cache_read_tokens`), refreshed every 5 s while the session runs. Shown as an absolute number without bar or percentage, because Antigravity does not report the size of the context window.
+
 ## 1.2.1
 
 - Subtler context bar: muted accent tint, thinner bar, no coloured text in the warning range (only above 85 % the text turns red).

@@ -432,6 +432,7 @@ export class AgentPanelView extends ItemView {
       w.onclick = () => this.plugin.cancelPending(s);
     }
     if (s.st.agent === "claude") this.renderContext(el, s);
+    else if (s.st.agent === "agy") this.renderAgyContext(el, s);
     const lim = this.plugin.limitsFor(s);
     if (lim && (lim.fiveHour || lim.week)) {
       const fmt = (b) => (b && b.used != null ? `${Math.round(b.used)} %` : "–");
@@ -480,6 +481,18 @@ export class AgentPanelView extends ItemView {
     chip.createSpan({ cls: "sa-context-pct", text: `${pct} %` });
     const k = (n) => (n == null ? "?" : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
     chip.setAttr("aria-label", t("context.tip", { pct, used: k(c.used_tokens ?? (c.size ? (pct / 100) * c.size : null)), size: k(c.size) }));
+  }
+
+  /** Antigravity: absolute token count only, agy reports no context window size. */
+  renderAgyContext(el, s) {
+    const c = this.plugin.readAgyContext(s.st.sessionId);
+    if (!c || !c.used_tokens) return;
+    const n = c.used_tokens;
+    const k = n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+    const chip = el.createSpan({ cls: "sa-context" });
+    setIcon(chip.createSpan({ cls: "sa-chip-icon" }), "brain");
+    chip.createSpan({ cls: "sa-context-pct", text: k });
+    chip.setAttr("aria-label", t("context.tipAgy", { used: n.toLocaleString(locale()) }));
   }
 
   countLabel(agent, n) {

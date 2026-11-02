@@ -16,7 +16,7 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 - **Model and effort per session.** The chips below the terminal switch the model or effort of this session only, without changing your global Claude default. The session restarts with its history kept.
 - **Note context.** Optionally, every Claude message silently carries the path of the note you are looking at (and a selection in it), so you can just ask "summarize this". Toggle it with one click.
 - **Usage limits** of your Claude plan (5-hour and weekly window) and of Antigravity's model groups, shown below the terminal.
-- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer.
+- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer. For Antigravity the token count in the context (agy reports no window size).
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
 - **Focus lock** (optional) keeps the keyboard focus in the terminal, handy for dictation tools that type into the focused window.
