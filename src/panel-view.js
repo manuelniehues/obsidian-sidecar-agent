@@ -337,13 +337,17 @@ export class AgentPanelView extends ItemView {
     return s.running ? t("state.running") : s.exited ? t("state.ended") : t("state.notStarted");
   }
 
-  /** Small state dot: working (pulsing), waiting for you (orange), finished while you were away (accent). */
+  /** Is the agent producing an answer right now? Then its icon (tab and info line) pulses. */
+  isBusy(s) {
+    return s.running && s.agentState === "busy";
+  }
+
+  /** Small state dot: waiting for you (orange), finished while you were away (accent). Working = pulsing icon. */
   stateDot(parent, s) {
     if (!s.running) return;
     let cls = "";
     if (s.agentState === "waiting") cls = "is-waiting";
-    else if (s.agentState === "busy") cls = "is-busy";
-    else if (s.unseen) cls = "is-unseen";
+    else if (s.unseen && s.agentState !== "busy") cls = "is-unseen";
     if (!cls) return;
     parent.createSpan({ cls: `sa-state ${cls}`, attr: { "aria-label": this.stateLabel(s) } });
   }
@@ -369,7 +373,9 @@ export class AgentPanelView extends ItemView {
     }
     for (const s of this.sessions) {
       const tab = el.createDiv({ cls: `sa-tab sa-${s.st.agent}${s === this.active ? " is-active" : ""}${s.running ? " is-running" : ""}` });
-      setIcon(tab.createSpan({ cls: "sa-tab-icon" }), AGENTS[s.st.agent]?.icon || "terminal");
+      const tabIcon = tab.createSpan({ cls: `sa-tab-icon${this.isBusy(s) ? " is-busy" : ""}` });
+      setIcon(tabIcon, AGENTS[s.st.agent]?.icon || "terminal");
+      if (this.isBusy(s)) tabIcon.setAttr("aria-label", this.stateLabel(s));
       tab.createSpan({ cls: "sa-tab-title", text: s.title() });
       this.stateDot(tab, s);
       tab.setAttr("aria-label", `${s.title()} · ${this.stateLabel(s)}`);
@@ -419,9 +425,9 @@ export class AgentPanelView extends ItemView {
       el.createSpan({ cls: "sa-info-muted", text: t("panel.empty") });
       return;
     }
-    const dot = el.createSpan({ cls: `sa-dot ${s.running ? "is-running" : s.exited ? "is-exited" : ""}${s.running && s.agentState === "busy" ? " is-busy" : ""}${s.running && s.agentState === "waiting" ? " is-waiting" : ""}` });
+    const dot = el.createSpan({ cls: `sa-dot ${s.running ? "is-running" : s.exited ? "is-exited" : ""}${s.running && s.agentState === "waiting" ? " is-waiting" : ""}` });
     dot.setAttr("aria-label", this.stateLabel(s));
-    setIcon(el.createSpan({ cls: "sa-info-icon" }), AGENTS[s.st.agent]?.icon || "terminal");
+    setIcon(el.createSpan({ cls: `sa-info-icon${this.isBusy(s) ? " is-busy" : ""}` }), AGENTS[s.st.agent]?.icon || "terminal");
     const name = el.createSpan({ cls: "sa-info-name", text: s.title() });
     name.setAttr("aria-label", t("info.clickToRename"));
     name.onclick = () => this.plugin.renameTerminal(s);

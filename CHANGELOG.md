@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.1
+
+- While an agent works, its icon in the session tab and in the info line pulses (Claude's star, Antigravity's orbit) instead of a separate pulsing dot. The dots for "waiting for you" and "finished while you were away" stay.
 ## 1.5.0
 
 - Compact for Antigravity sessions too: click the context chip or use the command (now named "Compact active session"). Antigravity gets a plain `/compact`, because there `/compact <text>` would compact and then answer the text.

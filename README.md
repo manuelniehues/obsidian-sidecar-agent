@@ -11,7 +11,7 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 - **Real terminal sessions** for Claude Code (`claude`) and Antigravity (`agy`), several in parallel as tabs.
 - **Session list** of every session started in this vault, grouped by day, with quick search and optional full-text search through the complete history. Click to resume, right-click to fork, rename or resume with another model.
 - **"This note" filter**: the sessions that read or edited the note you are looking at (from the agents' tool calls, shell commands and `@` mentions).
-- **Session state on the tabs**: a pulsing dot while an agent works, an orange one when it waits for a permission or an answer, an accent dot when it finished while you were looking elsewhere. Optional notification when a session finishes or needs you and you are not looking at it (outside Obsidian as a system notification).
+- **Session state on the tabs**: the agent icon pulses while it works, an orange dot when it waits for a permission or an answer, an accent dot when it finished while you were looking elsewhere. Optional notification when a session finishes or needs you and you are not looking at it (outside Obsidian as a system notification).
 - **Reading view** for Claude sessions: the conversation rendered like a note, with Obsidian's Markdown, tables, code blocks and **clickable wikilinks**. Updates live while Claude works and has its own input field.
 ![Reading view with clickable wikilinks](./images/reading-view.png)
 
@@ -55,7 +55,7 @@ Manual installation: download `main.js`, `manifest.json` and `styles.css` from t
 | Model / effort | Chips below the terminal. The switch applies to this session only. |
 | Stop | **Stop** button or Esc in the terminal. |
 | Compact | Click the context chip in the info line, the **compact** button from 85 % (Claude), or the command **Compact active session**. |
-| Session state | Dots on the tabs: pulsing = working, orange = waiting for you, accent = finished while you were away (cleared when you open the tab). |
+| Session state | Pulsing agent icon = working. Dots on the tabs: orange = waiting for you, accent = finished while you were away (cleared when you open the tab). |
 
 Keyboard shortcuts in the terminal: Shift+Enter new line, ⌘C copy selection, ⌘K clear, ⌥←/→ word left/right, ⌘←/→ line start/end, ⌘⌫ delete line. Other ⌘ shortcuts stay with Obsidian. Option stays a character key, so `@`, `[`, `]`, `{`, `}`, `|`, `\` and `~` work on layouts that need Option for them.
 

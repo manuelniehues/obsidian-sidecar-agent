@@ -696,16 +696,12 @@ body.sa-resizing.sa-resizing * {
   flex: 1;
 }
 
-/* Session state: working (pulsing), waiting for you, finished while you were away */
+/* Session state: the agent icon pulses while it works; dots for waiting for you and finished while you were away */
 .sidecar-agent-panel .sa-state {
   flex: none;
   width: 7px;
   height: 7px;
   border-radius: 50%;
-}
-.sidecar-agent-panel .sa-state.is-busy {
-  background: color-mix(in srgb, var(--interactive-accent) 70%, transparent);
-  animation: sa-pulse 1.4s ease-in-out infinite;
 }
 .sidecar-agent-panel .sa-state.is-waiting {
   background: var(--color-orange);
@@ -713,30 +709,32 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-state.is-unseen {
   background: var(--interactive-accent);
 }
-.sidecar-agent-panel .sa-agy .sa-state.is-busy {
-  background: color-mix(in srgb, var(--sa-agy-color) 70%, transparent);
-}
 .sidecar-agent-panel .sa-agy .sa-state.is-unseen {
   background: var(--sa-agy-color);
 }
-.sidecar-agent-panel .sa-dot.is-busy {
-  animation: sa-pulse 1.4s ease-in-out infinite;
-}
 .sidecar-agent-panel .sa-dot.is-waiting {
   background: var(--color-orange);
+}
+.sidecar-agent-panel .sa-tab-icon.is-busy,
+.sidecar-agent-panel .sa-info-icon.is-busy {
+  display: inline-flex; /* transform needs a box */
+  transform-origin: center;
+  animation: sa-pulse 1.4s ease-in-out infinite;
 }
 @keyframes sa-pulse {
   0%,
   100% {
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.3;
+    opacity: 0.35;
+    transform: scale(0.85);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sidecar-agent-panel .sa-state.is-busy,
-  .sidecar-agent-panel .sa-dot.is-busy {
+  .sidecar-agent-panel .sa-tab-icon.is-busy,
+  .sidecar-agent-panel .sa-info-icon.is-busy {
     animation: none;
   }
 }
