@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.6.0
+
+- "What's new" after an update: the changes of the new version (all versions since the last one you saw, if you skipped some) appear once in a dialog, with a link to the GitHub release. Taken from the changelog bundled with the plugin, no network access. Can be turned off in the dialog or in the settings; the command "What's new in this version" shows it again. Nothing is shown after a fresh install.
 ## 1.5.2
 
 - "Reload when idle" re-reads `manifest.json`, so Obsidian shows the new version number after the reload.

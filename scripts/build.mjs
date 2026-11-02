@@ -16,7 +16,7 @@ await build({
   platform: "node",
   target: "es2022",
   external: ["obsidian", "electron"],
-  loader: { ".py": "text" },
+  loader: { ".py": "text", ".md": "text" },
   legalComments: "none",
   logLevel: "warning",
   outfile: path.join(dist, "main.js"),

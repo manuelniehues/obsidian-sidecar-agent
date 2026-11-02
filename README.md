@@ -23,6 +23,7 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
 - **Reload when idle**: the command "Reload plugin when no session is working" waits until no answer is running, then reloads the plugin. A reload ends the panel terminals (they resume afterwards), so this keeps it from cutting off an answer. An agent working in a panel session can run it itself.
+- **What's new**: after an update, the changes of the new version appear once (from the bundled changelog, no network access). Can be turned off; the command "What's new in this version" shows it again.
 - **Copy from Claude's fullscreen view**: Claude Code copies its own mouse selection via OSC 52, which the terminal passes to the clipboard.
 - **Focus lock** (optional) keeps the keyboard focus in the terminal, handy for dictation tools that type into the focused window.
 - Calm terminal colors that follow your Obsidian theme and accent color.

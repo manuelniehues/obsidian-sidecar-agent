@@ -12,7 +12,9 @@ import SESSION_HOOK_PY from "./py/session_hook.py";
 import STATE_HOOK_PY from "./py/state_hook.py";
 import { AgentPanelView, VIEW_PANEL } from "./panel-view";
 import { isDarkTheme, obsidianAccent } from "./session";
-import { ConfirmModal, EFFORTS, NewSessionModal, TextModal } from "./modals";
+import { ConfirmModal, EFFORTS, NewSessionModal, TextModal, WhatsNewModal } from "./modals";
+import CHANGELOG from "../CHANGELOG.md";
+import { changelogSince, compareVersions } from "./changelog";
 import { parseResetText, toMs, findUsageLimit, agyTail } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
@@ -89,6 +91,7 @@ export default class SidecarAgentPlugin extends Plugin {
     });
     this.addCommand({ id: "toggle-focus-lock", name: t("cmd.focusLock"), callback: () => this.toggleFocusLock() });
     this.addCommand({ id: "reload-when-idle", name: t("cmd.reloadIdle"), callback: () => this.reloadWhenIdle() });
+    this.addCommand({ id: "whats-new", name: t("cmd.whatsNew"), callback: () => this.showWhatsNew(true) });
     this.addCommand({
       id: "compact",
       name: t("cmd.compact"),
@@ -143,6 +146,7 @@ export default class SidecarAgentPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("css-change", () => this.writeClaudeTheme()));
     this.app.workspace.onLayoutReady(() => this.setupNoteContext());
 
+    this.app.workspace.onLayoutReady(() => window.setTimeout(() => this.showWhatsNew(false), 2500));
     this.app.workspace.onLayoutReady(() => {
       // Read limits right away and shortly after start (not only on the first 30 s tick)
       this.tickLimits();
@@ -157,6 +161,28 @@ export default class SidecarAgentPlugin extends Plugin {
       }
     });
     this.register(() => this.store.stopWatching());
+  }
+
+  /**
+   * After an update: show the changelog of the new version(s) once. A fresh install only remembers the
+   * version. The changelog is bundled with the plugin, nothing is fetched from the network.
+   */
+  async showWhatsNew(force) {
+    const cur = this.manifest.version;
+    const seen = this.settings.lastSeenVersion;
+    if (!force) {
+      if (!seen) {
+        this.settings.lastSeenVersion = cur;
+        return this.saveSettings();
+      }
+      if (compareVersions(cur, seen) <= 0) return;
+    }
+    let sections = changelogSince(CHANGELOG, force ? "0" : seen, cur);
+    if (force) sections = sections.slice(0, 1);
+    this.settings.lastSeenVersion = cur;
+    await this.saveSettings();
+    if (!sections.length || (!force && this.settings.showWhatsNew === false)) return;
+    new WhatsNewModal(this, sections).open();
   }
 
   /** Always look the panel up in the workspace (a stored reference got lost when a second panel was closed). */

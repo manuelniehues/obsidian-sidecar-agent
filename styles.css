@@ -770,3 +770,16 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-credits {
   cursor: pointer;
 }
+
+/* "What's new" after an update */
+.sidecar-agent-whatsnew .sa-whatsnew-body ul {
+  padding-inline-start: 1.2em;
+}
+.sidecar-agent-whatsnew .sa-whatsnew-body li {
+  margin-bottom: 0.4em;
+}
+.sidecar-agent-whatsnew .sa-whatsnew-bar {
+  margin-top: 1em;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 0.8em;
+}

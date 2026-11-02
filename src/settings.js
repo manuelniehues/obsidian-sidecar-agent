@@ -45,6 +45,8 @@ export const DEFAULT_SETTINGS = {
   layout: { top: 280, bottom: 150, topCollapsed: false },
   aliases: {},
   agyModelsCache: null,
+  showWhatsNew: true, // changelog once after an update
+  lastSeenVersion: "",
   agyIds: [], // Antigravity conversations started in this vault (agy often stores no working folder)
 };
 
@@ -112,6 +114,16 @@ export class SidecarSettingTab extends PluginSettingTab {
             save();
           }),
       );
+    new Setting(el)
+      .setName(t("whatsNew.toggle"))
+      .setDesc(t("set.whatsNewDesc"))
+      .addToggle((tg) =>
+        tg.setValue(s.showWhatsNew !== false).onChange((v) => {
+          s.showWhatsNew = v;
+          save();
+        }),
+      )
+      .addExtraButton((b) => b.setIcon("sparkles").setTooltip(t("cmd.whatsNew")).onClick(() => p.showWhatsNew(true)));
     new Setting(el)
       .setName(t("set.focusLock"))
       .setDesc(t("set.focusLockDesc"))

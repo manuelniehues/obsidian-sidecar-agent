@@ -1,7 +1,51 @@
 // Sidecar Agent – dialogs (new session, rename, confirm)
-import { Modal, Setting } from "obsidian";
+import { Component, MarkdownRenderer, Modal, Setting } from "obsidian";
 import { AGENTS } from "./util";
 import { t } from "./i18n";
+
+/** "What's new" after an update: the changelog sections since the last version the user saw. */
+export class WhatsNewModal extends Modal {
+  constructor(plugin, sections) {
+    super(plugin.app);
+    this.plugin = plugin;
+    this.sections = sections;
+    this.comp = new Component();
+  }
+
+  onOpen() {
+    const p = this.plugin;
+    this.titleEl.setText(t("whatsNew.title", { version: p.manifest.version }));
+    const el = this.contentEl;
+    el.addClass("sidecar-agent-whatsnew");
+    this.comp.load();
+    for (const s of this.sections) {
+      if (this.sections.length > 1) el.createEl("h4", { text: s.version });
+      const body = el.createDiv({ cls: "sa-whatsnew-body" });
+      MarkdownRenderer.render(this.app, s.body, body, "", this.comp);
+    }
+    const bar = new Setting(el);
+    bar.settingEl.addClass("sa-whatsnew-bar");
+    bar.addButton((b) =>
+      b.setButtonText(t("whatsNew.release")).onClick(() => window.open(`https://github.com/manuelniehues/obsidian-sidecar-agent/releases/tag/${p.manifest.version}`)),
+    );
+    bar.addToggle((tg) =>
+      tg
+        .setTooltip(t("whatsNew.toggle"))
+        .setValue(p.settings.showWhatsNew !== false)
+        .onChange(async (v) => {
+          p.settings.showWhatsNew = v;
+          await p.saveSettings();
+        }),
+    );
+    bar.setName(t("whatsNew.toggle"));
+    bar.addButton((b) => b.setButtonText(t("whatsNew.ok")).setCta().onClick(() => this.close()));
+  }
+
+  onClose() {
+    this.comp.unload();
+    this.contentEl.empty();
+  }
+}
 
 export const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
 
