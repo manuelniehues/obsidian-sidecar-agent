@@ -501,7 +501,7 @@ body.sa-resizing.sa-resizing * {
   color: var(--text-muted);
   background: var(--background-modifier-hover);
   white-space: nowrap;
-  --sa-ctx-color: var(--interactive-accent);
+  --sa-ctx-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
 }
 .sidecar-agent-panel .sa-context .sa-chip-icon svg {
   width: 12px;
@@ -510,8 +510,8 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-context-bar {
   position: relative;
   width: 36px;
-  height: 5px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--background-modifier-border);
   overflow: hidden;
 }
@@ -523,12 +523,11 @@ body.sa-resizing.sa-resizing * {
   transition: width 0.3s ease;
 }
 .sidecar-agent-panel .sa-context.is-warn {
-  color: var(--color-orange);
-  --sa-ctx-color: var(--color-orange);
+  --sa-ctx-color: color-mix(in srgb, var(--color-orange) 55%, var(--background-modifier-border));
 }
 .sidecar-agent-panel .sa-context.is-crit {
   color: var(--color-red);
-  --sa-ctx-color: var(--color-red);
+  --sa-ctx-color: color-mix(in srgb, var(--color-red) 70%, var(--background-modifier-border));
 }
 
 /* Terminal ↔ reading view switch */

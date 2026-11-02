@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Subtler context bar: muted accent tint, thinner bar, no coloured text in the warning range (only above 85 % the text turns red).
+
 ## 1.2.0
 
 - Context window fill level for Claude sessions: a small bar with percentage in the info line (orange from 65 %, red from 85 %), tooltip with used and total tokens. The plugin's status line stores the value per session after every answer, so it updates live and stays correct when switching tabs. The terminal status line shows it as well.
