@@ -67,6 +67,8 @@ export function agyTail(text, mtime = 0) {
   const lines = String(text).split("\n");
   let rec = null;
   let last;
+  const started = new Set();
+  const finished = new Set();
   for (let i = lines.length - 1; i >= 0; i--) {
     if (!lines[i].trim()) continue;
     let d;
@@ -76,14 +78,18 @@ export function agyTail(text, mtime = 0) {
       continue; // the first line of a chunk may be cut off
     }
     if (last === undefined) last = d;
-    if (d.input_tokens != null) {
-      rec = { at: Date.parse(d.created_at) || mtime, used_tokens: (d.input_tokens || 0) + (d.cache_read_tokens || 0) };
-      break;
-    }
+    // Background tasks: agy continues by itself when one finishes. The step keeps status RUNNING in the
+    // transcript even afterwards, the end comes as a system message naming the task id.
+    const c = typeof d.content === "string" ? d.content : "";
+    let m = c.match(/running as a background task with task id: (\S+)/);
+    if (m) started.add(m[1]);
+    for (m of c.matchAll(/Task id "([^"]+)" finished/g)) finished.add(m[1]);
+    if (!rec && d.input_tokens != null) rec = { at: Date.parse(d.created_at) || mtime, used_tokens: (d.input_tokens || 0) + (d.cache_read_tokens || 0) };
   }
   if (!last) return rec;
-  const final = last.type === "PLANNER_RESPONSE" && last.status === "DONE" && !(last.tool_calls && last.tool_calls.length);
-  return { ...(rec || { at: mtime, used_tokens: 0 }), final, text: final ? String(last.content || "") : "" };
+  const background = [...started].filter((id) => !finished.has(id)).length;
+  const final = last.type === "PLANNER_RESPONSE" && last.status === "DONE" && !(last.tool_calls && last.tool_calls.length) && !background;
+  return { ...(rec || { at: mtime, used_tokens: 0 }), final, background, text: final ? String(last.content || "") : "" };
 }
 
 // ------------------------------------------------------------------ reading view (Claude session file)

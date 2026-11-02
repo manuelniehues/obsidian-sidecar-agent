@@ -56,6 +56,23 @@ test("Antigravity tail: tokens and whether the answer is complete", () => {
   assert.equal(running.final, false, "a GENERIC step after tool calls means agy is still working");
   assert.equal(running.used_tokens, 29000);
   assert.equal(agyTail('{"step_index":1,"inp'), null, "a cut-off chunk gives nothing");
+  // agy moved a long command to a background task and ended its turn: it continues by itself later
+  const bg = [
+    text.split("\n")[0],
+    JSON.stringify({ step_index: 1, type: "PLANNER_RESPONSE", status: "DONE", input_tokens: 100, tool_calls: [{ name: "run_command" }] }),
+    JSON.stringify({ step_index: 2, type: "GENERIC", status: "RUNNING", content: "Tool is running as a background task with task id: c1/task-2\nTask Description: sleep 25" }),
+    JSON.stringify({ step_index: 3, type: "PLANNER_RESPONSE", status: "DONE", input_tokens: 120 }),
+  ];
+  const b = agyTail(bg.join("\n"));
+  assert.deepEqual([b.final, b.background], [false, 1]);
+  // its end arrives as a system message, the step itself stays RUNNING
+  const end = [
+    ...bg,
+    JSON.stringify({ step_index: 4, type: "SYSTEM_MESSAGE", status: "DONE", content: '<SYSTEM_MESSAGE>[Message] content=Task id "c1/task-2" finished with result:\nCommand exited with code 0.</SYSTEM_MESSAGE>' }),
+    JSON.stringify({ step_index: 5, type: "PLANNER_RESPONSE", status: "DONE", input_tokens: 130, content: "FERTIG" }),
+  ];
+  const e = agyTail(end.join("\n"));
+  assert.deepEqual([e.final, e.background, e.text], [true, 0, "FERTIG"]);
 });
 
 test("usage credits only from Claude's footer", () => {

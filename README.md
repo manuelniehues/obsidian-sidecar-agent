@@ -18,7 +18,7 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 - **Model and effort per session.** The chips below the terminal switch the model or effort of this session only, without changing your global Claude default. The session restarts with its history kept.
 - **Note context.** Optionally, every Claude message silently carries the path of the note you are looking at (and a selection in it), so you can just ask "summarize this". Toggle it with one click.
 - **Usage limits** of your Claude plan (5-hour and weekly window) and of Antigravity's model groups, shown below the terminal.
-- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer. Click it to compact now or with a focus; from 85 % a **compact** button appears. For Antigravity the token count in the context (agy reports no window size).
+- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer. Click it to compact now or with a focus; from 85 % a **compact** button appears. For Antigravity the token count in the context (agy reports no window size); clicking it compacts as well.
 - **Usage credits warning**: when Claude switches to paid usage credits after a limit, a red chip in the info line and a notice tell you.
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
@@ -54,7 +54,7 @@ Manual installation: download `main.js`, `manifest.json` and `styles.css` from t
 | Note or selection | **Note** / **Selection** buttons below the terminal, the editor or file context menu, or drag a file into the terminal. The text lands in the prompt line without being sent. |
 | Model / effort | Chips below the terminal. The switch applies to this session only. |
 | Stop | **Stop** button or Esc in the terminal. |
-| Compact | Click the context chip in the info line, the **compact** button from 85 %, or the command **Compact active Claude session**. |
+| Compact | Click the context chip in the info line, the **compact** button from 85 % (Claude), or the command **Compact active session**. |
 | Session state | Dots on the tabs: pulsing = working, orange = waiting for you, accent = finished while you were away (cleared when you open the tab). |
 
 Keyboard shortcuts in the terminal: Shift+Enter new line, ⌘C copy selection, ⌘K clear, ⌥←/→ word left/right, ⌘←/→ line start/end, ⌘⌫ delete line. Other ⌘ shortcuts stay with Obsidian. Option stays a character key, so `@`, `[`, `]`, `{`, `}`, `|`, `\` and `~` work on layouts that need Option for them.
@@ -90,7 +90,7 @@ The note context sends only the **path** of the open note and a selection you ma
 - The reading view is available for Claude sessions only. Antigravity stores its history in a binary format.
 - The session list shows sessions started in this vault (the vault folder is the working directory).
 - Automatic resume needs Obsidian and the session to stay open.
-- Session state for Antigravity comes from its transcript (it has no hooks): there is no "waiting for you" state.
+- Session state for Antigravity comes from its transcript (agy accepts hooks only in a global or workspace `hooks.json`, not per session): there is no "waiting for you" state, and it updates every 5 s.
 - Do not resume a conversation in the panel while it is still open in a terminal. Sidecar Agent detects this for Claude and refuses to start.
 
 ## Support

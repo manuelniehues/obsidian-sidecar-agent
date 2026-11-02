@@ -587,7 +587,10 @@ export class TerminalSession {
         const rec = JSON.parse(fs.readFileSync(file, "utf8"));
         if (!rec.at || rec.at <= (this.stateReadAt || 0)) return;
         this.stateReadAt = rec.at;
-        if (rec.state && this.running) this.setAgentState(rec.state, rec.message);
+        if (rec.background !== undefined) this.bgTasks = rec.background;
+        // A turn that ended with background tasks running goes on by itself: still working
+        const state = rec.state === "done" && this.bgTasks > 0 ? "busy" : rec.state;
+        if (state && this.running) this.setAgentState(state, state === "busy" ? "" : rec.message);
       } catch {
         // file missing or half written: next change
       }

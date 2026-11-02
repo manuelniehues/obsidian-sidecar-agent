@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- Compact for Antigravity sessions too: click the context chip or use the command (now named "Compact active session"). Antigravity gets a plain `/compact`, because there `/compact <text>` would compact and then answer the text.
+- Background tasks: a session whose turn ended while a background task still runs (Claude `run_in_background`, Antigravity's background commands) now counts as working. Both agents continue by themselves when the task finishes, so there is no premature "finished" notification and "reload when idle" waits. Claude reports the tasks through its Stop hook, for Antigravity the plugin matches started and finished task ids in the transcript.
+- Fixed: the Antigravity state (working / finished) often never changed, because drawing the info line refreshed the cache the state check compared against.
+- "Reload when idle" also waits for an Antigravity session that was just started and is not identified yet.
 ## 1.4.0
 
 - Session state on the tabs and in the info line: working (pulsing), waiting for you (permission or question), finished while you were looking elsewhere. Claude reports it through hooks (plugin sessions only), Antigravity through its transcript.

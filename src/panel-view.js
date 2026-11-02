@@ -530,7 +530,8 @@ export class AgentPanelView extends ItemView {
     if (!c || !c.used_tokens) return;
     const n = c.used_tokens;
     const k = n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
-    const chip = el.createSpan({ cls: "sa-context" });
+    const chip = el.createSpan({ cls: "sa-context clickable" });
+    chip.onclick = (ev) => this.plugin.contextMenu(s, ev);
     setIcon(chip.createSpan({ cls: "sa-chip-icon" }), "brain");
     chip.createSpan({ cls: "sa-context-pct", text: k });
     chip.setAttr("aria-label", t("context.tipAgy", { used: n.toLocaleString(locale()) }));

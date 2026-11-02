@@ -20,6 +20,7 @@ target = os.environ.get("SIDECAR_AGENT_STATE_FILE")
 event = data.get("hook_event_name") or ""
 state = None
 msg = ""
+background = None
 if event in ("UserPromptSubmit", "PostToolUse", "PostToolUseFailure"):
     state = "busy"
 elif event == "PermissionRequest":
@@ -28,6 +29,9 @@ elif event == "PermissionRequest":
 elif event == "Stop":
     state = "done"
     msg = data.get("last_assistant_message") or ""
+    # Claude continues by itself when a background task finishes: such a turn is not really over
+    DONE = ("completed", "complete", "done", "failed", "error", "killed", "cancelled", "canceled", "stopped", "exited", "finished")
+    background = len([t for t in data.get("background_tasks") or [] if str((t or {}).get("status", "")).lower() not in DONE])
 elif event == "StopFailure":
     state = "done"
     msg = data.get("error") or data.get("message") or ""
@@ -56,6 +60,8 @@ if target and state:
                 "session_id": data.get("session_id"),
                 "at": int(time.time() * 1000),
             }
+            if background is not None:
+                rec["background"] = background
             # an idle reminder after a finished turn must not hide the turn's own answer
             if event == "Notification" and state == "done" and cur.get("state") == "done":
                 rec = None

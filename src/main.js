@@ -94,7 +94,7 @@ export default class SidecarAgentPlugin extends Plugin {
       name: t("cmd.compact"),
       checkCallback: (checking) => {
         const v = this.panel?.active;
-        if (!v?.running || v.st.agent !== "claude") return false;
+        if (!v?.running) return false;
         if (!checking) this.compact(v);
         return true;
       },
@@ -481,22 +481,33 @@ export default class SidecarAgentPlugin extends Plugin {
     return rec;
   }
 
-  /** Every 5 s: refresh the info line when the transcript of a running Antigravity session changed. */
+  /** Milliseconds since the Antigravity transcript was last written (Infinity if there is none). */
+  agyTranscriptAge(id) {
+    try {
+      return Date.now() - fs.statSync(path.join(AGY_DIR, "brain", id, ".system_generated", "logs", "transcript.jsonl")).mtimeMs;
+    } catch {
+      return Infinity;
+    }
+  }
+
+  /**
+   * Every 5 s: Antigravity has no hooks, so its state comes from the transcript. The last seen change is
+   * kept per session (the info line reads the same cache while rendering, so the cache cannot tell).
+   */
   pollAgyContext() {
     let changed = false;
     for (const s of this.terminals) {
       if (s.st.agent !== "agy" || !s.running || !s.st.sessionId) continue;
-      const before = this.agyCtx.get(s.st.sessionId)?.mtime;
       const rec = this.readAgyContext(s.st.sessionId);
       const mtime = this.agyCtx.get(s.st.sessionId)?.mtime;
-      if (mtime !== before) {
-        changed = true;
-        // Antigravity has no hooks: the transcript tells whether the last step finished the answer.
-        // First look at a transcript written since the start: an answer may already be complete.
-        if (!rec || (before === undefined && mtime < s.startedAt)) continue;
-        if (rec.final && !s.agentState) s.setAgentState("busy", "", { quiet: true });
-        s.setAgentState(rec.final ? "done" : "busy", rec.final ? rec.text : "");
-      }
+      if (mtime === undefined || mtime === s.agySeenMtime) continue;
+      const first = s.agySeenMtime === undefined;
+      s.agySeenMtime = mtime;
+      changed = true;
+      // An older transcript of a resumed conversation says nothing about now
+      if (!rec || (first && mtime < s.startedAt)) continue;
+      if (rec.final && !s.agentState) s.setAgentState("busy", "", { quiet: true });
+      s.setAgentState(rec.final ? "done" : "busy", rec.final ? rec.text : "");
     }
     if (changed) this.trigger("context-changed");
   }
@@ -600,7 +611,8 @@ export default class SidecarAgentPlugin extends Plugin {
    * working are checked against `claude agents --json`; twice not busy there means the turn is over.
    */
   async verifyBusy() {
-    const busy = [...this.terminals].filter((s) => s.st.agent === "claude" && s.running && s.agentState === "busy" && Date.now() - s.stateAt > 20000);
+    // Not for sessions waiting on background tasks: Claude reports them as idle, yet they continue by themselves
+    const busy = [...this.terminals].filter((s) => s.st.agent === "claude" && s.running && s.agentState === "busy" && !(s.bgTasks > 0) && Date.now() - s.stateAt > 20000);
     if (!busy.length) return;
     const agents = await this.claudeAgents();
     if (!agents.length) return;
@@ -698,9 +710,15 @@ export default class SidecarAgentPlugin extends Plugin {
   }
 
   // ---------------------------------------------------------------- compact
+  /**
+   * /compact for both agents. Claude: "/compact <focus>" keeps that topic in detail. Antigravity: "/compact"
+   * only, because there "/compact <text>" compacts and then answers the text as a new message.
+   */
   async compact(s, focus) {
-    if (!s?.running || s.st.agent !== "claude") return;
-    if (s.agentState === "busy" || (await this.claudeBusy(s.st.sessionId))) {
+    if (!s?.running) return;
+    if (s.st.agent === "agy") focus = "";
+    const busy = s.agentState === "busy" || s.agentState === "waiting" || (s.st.agent === "claude" && (await this.claudeBusy(s.st.sessionId)));
+    if (busy) {
       new Notice(t("notice.compactBusy"));
       return;
     }
@@ -725,7 +743,8 @@ export default class SidecarAgentPlugin extends Plugin {
         .setIcon("fold-vertical")
         .onClick(() => this.compact(s)),
     );
-    m.addItem((i) =>
+    if (s.st.agent === "claude")
+      m.addItem((i) =>
       i
         .setTitle(t("menu.compactFocus"))
         .setIcon("fold-vertical")
@@ -767,6 +786,13 @@ export default class SidecarAgentPlugin extends Plugin {
       if (!s.running) continue;
       if (s.agentState === "busy" || s.agentState === "waiting") {
         out.push(s);
+        continue;
+      }
+      if (s.st.agent === "agy") {
+        // Not identified yet: with a first prompt it is working on it; right after the start it may get one
+        if (!s.st.sessionId && (s.agyPrompt || Date.now() - (s.startedAt || 0) < 30000)) out.push(s);
+        // Transcript written in the last seconds (state is read only every 5 s)
+        else if (s.st.sessionId && this.agyTranscriptAge(s.st.sessionId) < 8000) out.push(s);
         continue;
       }
       if (s.st.agent === "claude") {

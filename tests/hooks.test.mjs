@@ -28,6 +28,8 @@ test("state hook: busy → waiting → busy → done, idle reminder keeps the an
   assert.equal(read().message, "Fertig.");
   hook(env, { hook_event_name: "PermissionRequest", tool_name: "Write" });
   assert.equal(read().state, "waiting");
+  hook(env, { hook_event_name: "Stop", last_assistant_message: "Läuft im Hintergrund.", background_tasks: [{ id: "a", type: "shell", status: "running" }, { id: "b", type: "shell", status: "completed" }] });
+  assert.deepEqual([read().state, read().background], ["done", 1], "running background tasks are counted");
 });
 
 test("state hook without its file or with garbage does not fail", () => {
