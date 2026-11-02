@@ -121,6 +121,7 @@ export default class SidecarAgentPlugin extends Plugin {
     this.limits = { claude: null, agy: null };
     this.pending = new Map(); // scheduled resumes per session key
     this.registerInterval(window.setInterval(() => this.tickLimits(), 30000));
+    this.watchContext();
     this.setupFocusLock();
     this.registerEvent(this.app.workspace.on("css-change", () => this.writeClaudeTheme()));
     this.app.workspace.onLayoutReady(() => this.setupNoteContext());
@@ -329,7 +330,7 @@ export default class SidecarAgentPlugin extends Plugin {
 
   /** Extra environment for agent processes: per-vault context file and the status line label. */
   agentEnv() {
-    return { SIDECAR_AGENT_CONTEXT: this.ctxFile, SIDECAR_AGENT_WEEK_LABEL: t("limits.week") };
+    return { SIDECAR_AGENT_CONTEXT: this.ctxFile, SIDECAR_AGENT_WEEK_LABEL: t("limits.week"), SIDECAR_AGENT_CTX_LABEL: t("context.short") };
   }
 
   // ---------------------------------------------------------------- note context
@@ -404,6 +405,43 @@ export default class SidecarAgentPlugin extends Plugin {
       // no limits known yet
     }
     return this.limits.claude;
+  }
+
+  /**
+   * Context window fill level of a Claude session, written by the status line after every API response:
+   * {at, used_percentage, used_tokens, size} or null.
+   */
+  readContext(sessionId) {
+    if (!sessionId) return null;
+    try {
+      return JSON.parse(fs.readFileSync(path.join(CACHE_DIR, "claude-context", `${sessionId}.json`), "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Watches the context files so the info line updates right after each answer; removes files older than 14 days. */
+  watchContext() {
+    const dir = path.join(CACHE_DIR, "claude-context");
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const old = Date.now() - 14 * 86400000;
+      for (const f of fs.readdirSync(dir)) {
+        const p = path.join(dir, f);
+        if (fs.statSync(p).mtimeMs < old) fs.unlinkSync(p);
+      }
+      let timer = null;
+      const w = fs.watch(dir, () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => this.trigger("context-changed"), 300);
+      });
+      this.register(() => {
+        window.clearTimeout(timer);
+        w.close();
+      });
+    } catch (e) {
+      console.warn("[sidecar-agent] context watch", e);
+    }
   }
 
   /** Antigravity limits via `agy -p /usage` (uses no quota), at most every 5 minutes. */

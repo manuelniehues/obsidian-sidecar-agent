@@ -155,6 +155,7 @@ export class AgentPanelView extends ItemView {
     this.registerEvent(this.plugin.store.on("changed", () => this.renderAll()));
     this.registerEvent(this.plugin.store.on("error", (e) => this.setStatus(`⚠️ ${t("panel.indexError", { msg: e.message })}`)));
     this.registerEvent(this.plugin.on("terminals-changed", () => this.renderAll()));
+    this.registerEvent(this.plugin.on("context-changed", () => this.renderInfo()));
     this.registerEvent(this.app.workspace.on("css-change", () => this.sessions.forEach((s) => s.applyOptions())));
 
     this.built = true;
@@ -430,6 +431,7 @@ export class AgentPanelView extends ItemView {
       w.setAttr("aria-label", t("info.resumeTip"));
       w.onclick = () => this.plugin.cancelPending(s);
     }
+    if (s.st.agent === "claude") this.renderContext(el, s);
     const lim = this.plugin.limitsFor(s);
     if (lim && (lim.fiveHour || lim.week)) {
       const fmt = (b) => (b && b.used != null ? `${Math.round(b.used)} %` : "–");
@@ -463,6 +465,21 @@ export class AgentPanelView extends ItemView {
       this.plugin.toggleFocusLock();
     };
     el.createSpan({ cls: "sa-info-meta", text: bits.filter(Boolean).join(" · ") });
+  }
+
+  /** Context window fill level as a small bar (Claude only; Antigravity reports no context usage). */
+  renderContext(el, s) {
+    const c = this.plugin.readContext(s.st.sessionId);
+    if (!c || c.used_percentage == null) return;
+    const pct = Math.max(0, Math.min(100, Math.round(c.used_percentage)));
+    const lvl = pct >= 85 ? " is-crit" : pct >= 65 ? " is-warn" : "";
+    const chip = el.createSpan({ cls: `sa-context${lvl}` });
+    setIcon(chip.createSpan({ cls: "sa-chip-icon" }), "brain");
+    const bar = chip.createSpan({ cls: "sa-context-bar" });
+    bar.createSpan({ cls: "sa-context-fill" }).style.width = `${pct}%`;
+    chip.createSpan({ cls: "sa-context-pct", text: `${pct} %` });
+    const k = (n) => (n == null ? "?" : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+    chip.setAttr("aria-label", t("context.tip", { pct, used: k(c.used_tokens ?? (c.size ? (pct / 100) * c.size : null)), size: k(c.size) }));
   }
 
   countLabel(agent, n) {

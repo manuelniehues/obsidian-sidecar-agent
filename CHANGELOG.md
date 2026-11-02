@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- Context window fill level for Claude sessions: a small bar with percentage in the info line (orange from 65 %, red from 85 %), tooltip with used and total tokens. The plugin's status line stores the value per session after every answer, so it updates live and stays correct when switching tabs. The terminal status line shows it as well.
+
 ## 1.1.5
 
 - Subtler agent colours: the new-session buttons in the toolbar and the active session tab use a lighter tint, a fainter border and a muted text colour.

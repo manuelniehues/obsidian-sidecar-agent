@@ -489,6 +489,48 @@ body.sa-resizing.sa-resizing * {
   cursor: pointer;
 }
 
+/* Context window fill level in the info line */
+.sidecar-agent-panel .sa-context {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  white-space: nowrap;
+  --sa-ctx-color: var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-context .sa-chip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.sidecar-agent-panel .sa-context-bar {
+  position: relative;
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+.sidecar-agent-panel .sa-context-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--sa-ctx-color);
+  transition: width 0.3s ease;
+}
+.sidecar-agent-panel .sa-context.is-warn {
+  color: var(--color-orange);
+  --sa-ctx-color: var(--color-orange);
+}
+.sidecar-agent-panel .sa-context.is-crit {
+  color: var(--color-red);
+  --sa-ctx-color: var(--color-red);
+}
+
 /* Terminal ↔ reading view switch */
 .sidecar-agent-panel .sa-tabs {
   align-items: center;

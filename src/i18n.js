@@ -142,6 +142,8 @@ const EN = {
   "info.resumeTip": "Usage limit reached. The session resumes automatically after the reset. Click to cancel.",
 
   "limits.week": "week",
+  "context.short": "ctx",
+  "context.tip": "Context window: {pct} % used ({used} of {size} tokens). Claude Code compacts automatically when it gets full, /compact does it now.",
   "limits.claudePlan": "Claude plan",
   "limits.tip": "{label}: used 5 h {five} (reset {fiveAt}), week {week} (reset {weekAt})",
 
@@ -373,6 +375,8 @@ const DE = {
   "info.resumeTip": "Nutzungslimit erreicht. Die Session wird nach dem Reset automatisch fortgesetzt. Klicken zum Abbrechen.",
 
   "limits.week": "Woche",
+  "context.short": "Kontext",
+  "context.tip": "Kontextfenster: {pct} % belegt ({used} von {size} Tokens). Claude Code verdichtet automatisch, wenn es voll wird, /compact sofort.",
   "limits.claudePlan": "Claude-Abo",
   "limits.tip": "{label}: verbraucht 5 h {five} (Reset {fiveAt}), Woche {week} (Reset {weekAt})",
 

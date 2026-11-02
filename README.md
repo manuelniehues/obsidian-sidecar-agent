@@ -16,6 +16,7 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 - **Model and effort per session.** The chips below the terminal switch the model or effort of this session only, without changing your global Claude default. The session restarts with its history kept.
 - **Note context.** Optionally, every Claude message silently carries the path of the note you are looking at (and a selection in it), so you can just ask "summarize this". Toggle it with one click.
 - **Usage limits** of your Claude plan (5-hour and weekly window) and of Antigravity's model groups, shown below the terminal.
+- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer.
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
 - **Focus lock** (optional) keeps the keyboard focus in the terminal, handy for dictation tools that type into the focused window.
@@ -62,8 +63,8 @@ Like the agents themselves, the plugin works with files outside your vault:
 | `~/.claude/projects/<vault>/*.jsonl` | read, append | Claude Code's session files of this vault, for the session list, search and the reading view. When you rename a session, the name is appended like `/rename` does. |
 | `~/.claude/themes/sidecar-agent.json` | write | The muted color scheme for plugin sessions (setting "Color scheme"). Not written when you choose Claude's own colors. |
 | `~/.gemini/antigravity-cli/` | read only | Antigravity's conversation list and last chosen model. |
-| `~/Library/Caches/sidecar-agent/` | write | Session index, Claude usage limits, the current note context (one file per vault). |
-| `~/Library/Application Support/sidecar-agent/` | write | Two small Python scripts that Claude runs in plugin sessions: the status line (reads your usage limits) and the note-context hook. |
+| `~/Library/Caches/sidecar-agent/` | write | Session index, Claude usage limits, context fill level per Claude session, the current note context (one file per vault). |
+| `~/Library/Application Support/sidecar-agent/` | write | Two small Python scripts that Claude runs in plugin sessions: the status line (reads your usage limits and the context fill level) and the note-context hook. |
 
 Your global `~/.claude/settings.json` is never changed. Plugin sessions get their status line, hook, color scheme and `autoContinueAtUsageLimit` through `--settings`, which applies to that process only.
 
