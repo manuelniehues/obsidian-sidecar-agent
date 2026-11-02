@@ -4,9 +4,15 @@
 #   scripts/release.sh               # commit, tag, push, release with main.js, manifest.json, styles.css
 set -euo pipefail
 cd "${0:A:h}/.."
+# Real Node for the test runner (`node` in PATH can be a Bun shim, which has no `node --test`)
+NODE=$(for n in /opt/homebrew/bin/node /usr/local/bin/node; do [[ -x $n ]] && echo $n && break; done)
+NODE=${NODE:-node}
 V=$(node -p "require('./manifest.json').version")
 node scripts/check-i18n.mjs
 npx eslint src
+"$NODE" --test tests/
+# Do the parsers still understand the sessions of the installed Claude Code / Antigravity?
+"$NODE" scripts/compat-check.mjs
 npm run build
 git add -A
 git diff --cached --quiet || git commit -m "Release $V"

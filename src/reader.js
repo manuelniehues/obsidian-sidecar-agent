@@ -5,23 +5,10 @@ import { Component, MarkdownRenderer, setIcon } from "obsidian";
 import fs from "fs";
 import path from "path";
 import { t } from "./i18n";
+import { ingestLine } from "./transcript";
 
 const INITIAL_BYTES = 4 * 1024 * 1024; // on first open, read only the end of large sessions
 const MAX_TURNS = 80; // older turns are hidden
-
-/** Strip appended context blocks from user messages. */
-function cleanUser(text) {
-  let x = String(text || "");
-  const cut = x.search(/\n\s*<(obsidian_context|system-reminder)\b/);
-  if (cut > 0) x = x.slice(0, cut);
-  return x.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
-}
-
-function toolSummary(b) {
-  const i = b.input || {};
-  const d = i.description || i.command || i.file_path || i.pattern || i.query || i.url || i.prompt || "";
-  return `${b.name}${d ? ": " + String(d).replace(/\s+/g, " ").slice(0, 140) : ""}`;
-}
 
 export class SessionReader {
   constructor(plugin, session, host) {
@@ -193,55 +180,7 @@ export class SessionReader {
 
   /** Sort one line of the session file into turns. Returns true if something changed. */
   ingest(line) {
-    let d;
-    try {
-      d = JSON.parse(line);
-    } catch {
-      return false;
-    }
-    if (d.isSidechain || d.isMeta) return false;
-    const c = d.message?.content;
-    if (d.type === "user") {
-      if (typeof c === "string") {
-        const text = cleanUser(c);
-        if (!text || text.startsWith("<")) return false;
-        this.turns.push({ key: d.uuid, role: "user", text, sig: "" });
-        return true;
-      }
-      if (Array.isArray(c)) {
-        const texts = c
-          .filter((b) => b.type === "text")
-          .map((b) => cleanUser(b.text))
-          .filter((x) => x && !x.startsWith("<"));
-        if (!texts.length) return false; // tool results
-        this.turns.push({ key: d.uuid, role: "user", text: texts.join("\n\n"), sig: "" });
-        return true;
-      }
-      return false;
-    }
-    if (d.type === "assistant" && Array.isArray(c)) {
-      let last = this.turns[this.turns.length - 1];
-      if (!last || last.role !== "assistant") {
-        last = { key: d.uuid, role: "assistant", parts: [], sig: "" };
-        this.turns.push(last);
-      }
-      let added = false;
-      for (const b of c) {
-        if (b.type === "text" && b.text?.trim()) {
-          last.parts.push({ kind: "text", text: b.text });
-          added = true;
-        } else if (b.type === "tool_use") {
-          last.parts.push({ kind: "tool", text: toolSummary(b) });
-          added = true;
-        }
-      }
-      if (d.isApiErrorMessage) {
-        last.parts.push({ kind: "error", text: c.map((b) => b.text || "").join(" ") });
-        added = true;
-      }
-      return added;
-    }
-    return false;
+    return ingestLine(this.turns, line);
   }
 
   showNote(msg) {

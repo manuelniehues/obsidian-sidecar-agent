@@ -12,9 +12,11 @@ import re
 import sqlite3
 import subprocess
 import sys
+import unicodedata
 from datetime import datetime
 
-CACHE_VERSION = 4
+CACHE_VERSION = 5
+MAX_FILES = 300  # vault files remembered per session (for the "this note" filter)
 
 
 def ms(dt_str):
@@ -66,6 +68,62 @@ def message_text(msg):
     return ""
 
 
+def vault_rel(p, vault):
+    """Vault-relative path (NFC) of a file the agent touched, or None if it is outside the vault."""
+    if not isinstance(p, str):
+        return None
+    p = p.strip().strip("\"'").strip()
+    if not p or "\n" in p or len(p) > 500 or any(c in p for c in "$*?{}`<>|"):
+        return None
+    if p.startswith("~/"):
+        p = os.path.expanduser(p)
+    if p.startswith("/"):
+        root = vault.rstrip("/") + "/"
+        if not p.startswith(root):
+            return None
+        p = p[len(root):]
+    elif p.startswith("./"):
+        p = p[2:]
+    p = unicodedata.normalize("NFC", p)
+    if not p or p.startswith(".") or p.startswith("../"):
+        return None
+    return p
+
+
+# Paths of notes in shell commands: quoted strings or plain words ending in a note extension
+NOTE_EXT = r"(?:md|canvas|base|pdf)"
+CMD_PATH_RE = re.compile(
+    r'"([^"\n]+?\.' + NOTE_EXT + r')"|\'([^\'\n]+?\.' + NOTE_EXT + r')\'|(?<![\w/"\'.])((?:[\w.\-~]+/)*[\w.\-]+\.' + NOTE_EXT + r')\b'
+)
+MENTION_RE = re.compile(r'@"([^"\n]+)"|(?<![\w@])@((?:[\w.\-]+/)*[\w.\-]+\.\w+)')
+PATH_KEYS = ("file_path", "notebook_path", "path", "filePath")
+
+
+def add_path(out, p, vault):
+    r = vault_rel(p, vault)
+    if r and r not in out and len(out) < MAX_FILES:
+        out.append(r)
+
+
+def tool_files(name, inp, vault, out):
+    """Vault files a Claude tool call reads or writes."""
+    if not isinstance(inp, dict):
+        return
+    for k in PATH_KEYS:
+        v = inp.get(k)
+        if isinstance(v, str) and (name != "Grep" and name != "Glob" or "." in os.path.basename(v)):
+            add_path(out, v, vault)
+    cmd = inp.get("command")
+    if isinstance(cmd, str):
+        for m in CMD_PATH_RE.finditer(cmd):
+            add_path(out, m.group(1) or m.group(2) or m.group(3), vault)
+
+
+def mention_files(text, vault, out):
+    for m in MENTION_RE.finditer(text or ""):
+        add_path(out, m.group(1) or m.group(2), vault)
+
+
 LINE_RE = {
     "title": re.compile(rb'^[^\n]*"(?:custom-title|ai-title)"[^\n]*$', re.M),
     "last": re.compile(rb'^[^\n]*"type":"last-prompt"[^\n]*$', re.M),
@@ -73,10 +131,11 @@ LINE_RE = {
     "ts": re.compile(rb'"timestamp":"([^"]+)"'),
     "cwd": re.compile(rb'"cwd":"((?:[^"\\]|\\.)*)"'),
     "model": re.compile(rb'"model":"([A-Za-z0-9.\-\[\]_:]+)"'),
+    "tool": re.compile(rb'^[^\n]*"tool_use"[^\n]*$', re.M),
 }
 
 
-def parse_claude(path):
+def parse_claude(path, vault=""):
     with open(path, "rb") as f:
         data = f.read()
     sid = os.path.basename(path)[:-6]
@@ -101,6 +160,7 @@ def parse_claude(path):
             pass
     first = ""
     users = 0
+    files = []
     for m in LINE_RE["user"].finditer(data):
         try:
             d = json.loads(m.group(0))
@@ -117,6 +177,20 @@ def parse_claude(path):
         users += 1
         if not first:
             first = clean_prompt(s)
+        if vault:
+            cut = re.search(r"\n\s*<(obsidian_context|system-reminder)\b", s)
+            mention_files(s[:cut.start()] if cut else s, vault, files)
+    if vault:
+        for m in LINE_RE["tool"].finditer(data):
+            try:
+                d = json.loads(m.group(0))
+            except Exception:  # noqa: BLE001
+                continue
+            if d.get("type") != "assistant" or d.get("isSidechain"):
+                continue
+            for b in (d.get("message") or {}).get("content") or []:
+                if isinstance(b, dict) and b.get("type") == "tool_use":
+                    tool_files(b.get("name"), b.get("input"), vault, files)
     model = ""
     for m in reversed(list(LINE_RE["model"].finditer(data[-3_000_000:]))):
         v = m.group(1).decode("utf-8", "ignore")
@@ -138,6 +212,7 @@ def parse_claude(path):
         "updated": int(st.st_mtime * 1000),
         "cwd": json.loads(b'"' + cwd.group(1) + b'"') if cwd else "",
         "size": st.st_size,
+        "files": files,
     }
 
 
@@ -165,7 +240,7 @@ def scan_dir(directory, suffix, parser, cache_part):
     return out
 
 
-def agy_list(db, vault):
+def agy_list(db, vault, known=()):
     if not db or not os.path.exists(db):
         return []
     con = sqlite3.connect("file:%s?mode=ro" % db, uri=True, timeout=2)
@@ -183,7 +258,7 @@ def agy_list(db, vault):
             uris = json.loads(ws) if ws else []
         except Exception:  # noqa: BLE001
             uris = []
-        if not any(u.rstrip("/") == vault_uri for u in uris):
+        if not any(u.rstrip("/") == vault_uri for u in uris) and cid not in known:
             continue
         if parent:
             continue
@@ -199,6 +274,55 @@ def agy_list(db, vault):
     return out
 
 
+# agy tool calls carry paths as JSON strings with literal quotes ("Path":"\"/abs/path\""), any key name
+def agy_arg(v):
+    """agy stores tool arguments JSON-encoded a second time ("Path":"\\"/abs/path\\"")."""
+    if isinstance(v, str) and len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+        try:
+            return json.loads(v)
+        except Exception:  # noqa: BLE001
+            return v[1:-1]
+    return v
+
+
+AGY_TOOL_RE = re.compile(rb'^[^\n]*"tool_calls"[^\n]*$', re.M)
+
+
+def agy_transcript_files(brain, cid, vault, cached):
+    """Vault files touched in an Antigravity conversation (from its transcript); cached by mtime/size."""
+    f = os.path.join(brain, cid, ".system_generated", "logs", "transcript.jsonl")
+    try:
+        st = os.stat(f)
+    except OSError:
+        return [], None
+    key = "%d:%d" % (int(st.st_mtime * 1000), st.st_size)
+    if cached and cached.get("k") == key:
+        return cached.get("f", []), cached
+    out = []
+    try:
+        with open(f, "rb") as fh:
+            data = fh.read()
+        for m in AGY_TOOL_RE.finditer(data):
+            try:
+                d = json.loads(m.group(0))
+            except Exception:  # noqa: BLE001
+                continue
+            for call in d.get("tool_calls") or []:
+                for k, v in ((call or {}).get("args") or {}).items():
+                    v = agy_arg(v)
+                    if not isinstance(v, str):
+                        continue
+                    if k == "CommandLine":
+                        for cm in CMD_PATH_RE.finditer(v):
+                            add_path(out, cm.group(1) or cm.group(2) or cm.group(3), vault)
+                    elif "path" in k.lower() or "file" in k.lower():
+                        add_path(out, v, vault)
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write("agy transcript %s: %s\n" % (cid, e))
+    rec = {"k": key, "f": out}
+    return out, rec
+
+
 def cmd_index(a):
     cache_file = a["cache"]
     try:
@@ -208,20 +332,26 @@ def cmd_index(a):
             cache = {}
     except Exception:  # noqa: BLE001
         cache = {}
-    claude = scan_dir(a.get("claudeDir"), ".jsonl", parse_claude, cache.get("claude", {}))
+    vault = a.get("vault") or ""
+    claude = scan_dir(a.get("claudeDir"), ".jsonl", lambda p: parse_claude(p, vault), cache.get("claude", {}))
+    try:
+        agy = agy_list(a.get("agyDb"), vault, set(a.get("agyIds") or []))
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write("agy: %s\n" % e)
+        agy = []
+    agy_files = {}
+    old_files = cache.get("agyFiles", {})
+    brain = os.path.join(os.path.dirname(a.get("agyDb") or ""), "brain")
+    for c in agy:
+        c["files"], agy_files[c["id"]] = agy_transcript_files(brain, c["id"], vault, old_files.get(c["id"]))
     try:
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         tmp = cache_file + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"v": CACHE_VERSION, "claude": claude}, f, ensure_ascii=False)
+            json.dump({"v": CACHE_VERSION, "claude": claude, "agyFiles": agy_files}, f, ensure_ascii=False)
         os.replace(tmp, cache_file)
     except Exception as e:  # noqa: BLE001
         sys.stderr.write("cache not writable: %s\n" % e)
-    try:
-        agy = agy_list(a.get("agyDb"), a["vault"])
-    except Exception as e:  # noqa: BLE001
-        sys.stderr.write("agy: %s\n" % e)
-        agy = []
     json.dump({
         "claude": [v["e"] for v in claude.values()],
         "agy": agy,
@@ -235,13 +365,14 @@ def rg_files(rg, query, directory, glob):
         r = subprocess.run([rg, "-l", "-i", "-F", "--max-depth", "1", "--glob", glob, "--", query, directory],
                            capture_output=True, text=True)
         return [os.path.basename(x) for x in r.stdout.splitlines() if x]
+    # Without ripgrep: case-insensitive also for umlauts (bytes.lower() only knows ASCII)
     hits = []
-    q = query.lower().encode("utf-8")
+    q = query.casefold()
     suffix = glob.lstrip("*")
     for name in os.listdir(directory):
         if name.endswith(suffix):
             with open(os.path.join(directory, name), "rb") as f:
-                if q in f.read().lower():
+                if q in f.read().decode("utf-8", "replace").casefold():
                     hits.append(name)
     return hits
 

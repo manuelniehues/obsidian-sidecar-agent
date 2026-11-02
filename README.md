@@ -10,15 +10,20 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 
 - **Real terminal sessions** for Claude Code (`claude`) and Antigravity (`agy`), several in parallel as tabs.
 - **Session list** of every session started in this vault, grouped by day, with quick search and optional full-text search through the complete history. Click to resume, right-click to fork, rename or resume with another model.
+- **"This note" filter**: the sessions that read or edited the note you are looking at (from the agents' tool calls, shell commands and `@` mentions).
+- **Session state on the tabs**: a pulsing dot while an agent works, an orange one when it waits for a permission or an answer, an accent dot when it finished while you were looking elsewhere. Optional notification when a session finishes or needs you and you are not looking at it (outside Obsidian as a system notification).
 - **Reading view** for Claude sessions: the conversation rendered like a note, with Obsidian's Markdown, tables, code blocks and **clickable wikilinks**. Updates live while Claude works and has its own input field.
 ![Reading view with clickable wikilinks](./images/reading-view.png)
 
 - **Model and effort per session.** The chips below the terminal switch the model or effort of this session only, without changing your global Claude default. The session restarts with its history kept.
 - **Note context.** Optionally, every Claude message silently carries the path of the note you are looking at (and a selection in it), so you can just ask "summarize this". Toggle it with one click.
 - **Usage limits** of your Claude plan (5-hour and weekly window) and of Antigravity's model groups, shown below the terminal.
-- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer. For Antigravity the token count in the context (agy reports no window size).
+- **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer. Click it to compact now or with a focus; from 85 % a **compact** button appears. For Antigravity the token count in the context (agy reports no window size).
+- **Usage credits warning**: when Claude switches to paid usage credits after a limit, a red chip in the info line and a notice tell you.
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
+- **Reload when idle**: the command "Reload plugin when no session is working" waits until no answer is running, then reloads the plugin. A reload ends the panel terminals (they resume afterwards), so this keeps it from cutting off an answer. An agent working in a panel session can run it itself.
+- **Copy from Claude's fullscreen view**: Claude Code copies its own mouse selection via OSC 52, which the terminal passes to the clipboard.
 - **Focus lock** (optional) keeps the keyboard focus in the terminal, handy for dictation tools that type into the focused window.
 - Calm terminal colors that follow your Obsidian theme and accent color.
 - English and German interface.
@@ -49,6 +54,8 @@ Manual installation: download `main.js`, `manifest.json` and `styles.css` from t
 | Note or selection | **Note** / **Selection** buttons below the terminal, the editor or file context menu, or drag a file into the terminal. The text lands in the prompt line without being sent. |
 | Model / effort | Chips below the terminal. The switch applies to this session only. |
 | Stop | **Stop** button or Esc in the terminal. |
+| Compact | Click the context chip in the info line, the **compact** button from 85 %, or the command **Compact active Claude session**. |
+| Session state | Dots on the tabs: pulsing = working, orange = waiting for you, accent = finished while you were away (cleared when you open the tab). |
 
 Keyboard shortcuts in the terminal: Shift+Enter new line, ⌘C copy selection, ⌘K clear, ⌥←/→ word left/right, ⌘←/→ line start/end, ⌘⌫ delete line. Other ⌘ shortcuts stay with Obsidian. Option stays a character key, so `@`, `[`, `]`, `{`, `}`, `|`, `\` and `~` work on layouts that need Option for them.
 
@@ -62,9 +69,9 @@ Like the agents themselves, the plugin works with files outside your vault:
 |---|---|---|
 | `~/.claude/projects/<vault>/*.jsonl` | read, append | Claude Code's session files of this vault, for the session list, search and the reading view. When you rename a session, the name is appended like `/rename` does. |
 | `~/.claude/themes/sidecar-agent.json` | write | The muted color scheme for plugin sessions (setting "Color scheme"). Not written when you choose Claude's own colors. |
-| `~/.gemini/antigravity-cli/` | read only | Antigravity's conversation list and last chosen model. |
-| `~/Library/Caches/sidecar-agent/` | write | Session index, Claude usage limits, context fill level per Claude session, the current note context (one file per vault). |
-| `~/Library/Application Support/sidecar-agent/` | write | Two small Python scripts that Claude runs in plugin sessions: the status line (reads your usage limits and the context fill level) and the note-context hook. |
+| `~/.gemini/antigravity-cli/` | read only | Antigravity's conversation list, last conversation per folder, conversation transcripts (context size, state, touched files) and last chosen model. |
+| `~/Library/Caches/sidecar-agent/` | write | Session index (including the vault files each session touched), Claude usage limits, context fill level per Claude session, the current note context (one file per vault), the current session id and state per panel terminal. |
+| `~/Library/Application Support/sidecar-agent/` | write | Small Python scripts that Claude runs in plugin sessions: the status line (reads your usage limits and the context fill level), the note-context hook, and hooks that report the session id and the state (working, waiting, done). |
 
 Your global `~/.claude/settings.json` is never changed. Plugin sessions get their status line, hook, color scheme and `autoContinueAtUsageLimit` through `--settings`, which applies to that process only.
 
@@ -75,6 +82,7 @@ The note context sends only the **path** of the open note and a selection you ma
 - **Permission mode** (Claude) and **Allow tool calls automatically** (Antigravity, off by default) decide how much the agent may do without asking. Sidecar Agent passes them through and does not add any sandbox of its own. Agents can change and delete files in your vault, so keep backups.
 - **Remote Control**: with Claude's `remoteControlAtStartup` or the setting "Always on", plugin sessions show up in the Claude app on your phone.
 - **Resume after usage limit** is on by default and can be turned off or given your own message.
+- **Notifications** report finished or waiting sessions you are not looking at. Turn them off in the settings.
 
 ## Known limitations
 
@@ -82,6 +90,7 @@ The note context sends only the **path** of the open note and a selection you ma
 - The reading view is available for Claude sessions only. Antigravity stores its history in a binary format.
 - The session list shows sessions started in this vault (the vault folder is the working directory).
 - Automatic resume needs Obsidian and the session to stay open.
+- Session state for Antigravity comes from its transcript (it has no hooks): there is no "waiting for you" state.
 - Do not resume a conversation in the panel while it is still open in a terminal. Sidecar Agent detects this for Claude and refuses to start.
 
 ## Support

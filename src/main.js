@@ -9,11 +9,13 @@ import { SessionStore } from "./store";
 import STATUSLINE_PY from "./py/statusline.py";
 import CONTEXT_HOOK_PY from "./py/context_hook.py";
 import SESSION_HOOK_PY from "./py/session_hook.py";
+import STATE_HOOK_PY from "./py/state_hook.py";
 import { AgentPanelView, VIEW_PANEL } from "./panel-view";
 import { isDarkTheme, obsidianAccent } from "./session";
 import { ConfirmModal, EFFORTS, NewSessionModal, TextModal } from "./modals";
+import { parseResetText, toMs, findUsageLimit, agyTail } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
-import { AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
+import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
 
 const THEME_NAME = "sidecar-agent";
@@ -86,6 +88,17 @@ export default class SidecarAgentPlugin extends Plugin {
       },
     });
     this.addCommand({ id: "toggle-focus-lock", name: t("cmd.focusLock"), callback: () => this.toggleFocusLock() });
+    this.addCommand({ id: "reload-when-idle", name: t("cmd.reloadIdle"), callback: () => this.reloadWhenIdle() });
+    this.addCommand({
+      id: "compact",
+      name: t("cmd.compact"),
+      checkCallback: (checking) => {
+        const v = this.panel?.active;
+        if (!v?.running || v.st.agent !== "claude") return false;
+        if (!checking) this.compact(v);
+        return true;
+      },
+    });
 
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu, editor, info) => {
@@ -125,6 +138,8 @@ export default class SidecarAgentPlugin extends Plugin {
     this.agyCtx = new Map(); // conversation id → {mtime, rec}
     this.registerInterval(window.setInterval(() => this.pollAgyContext(), 5000));
     this.setupFocusLock();
+    this.registerDomEvent(window, "focus", () => this.markSeen(this.panel?.active));
+    this.cleanupStaleFiles();
     this.registerEvent(this.app.workspace.on("css-change", () => this.writeClaudeTheme()));
     this.app.workspace.onLayoutReady(() => this.setupNoteContext());
 
@@ -158,7 +173,10 @@ export default class SidecarAgentPlugin extends Plugin {
   }
 
   onunload() {
-    for (const v of this.terminals || []) v.kill();
+    for (const v of this.terminals || []) {
+      v.kill();
+      v.unwatchFiles?.();
+    }
     try {
       if (this.ctxFile) fs.writeFileSync(this.ctxFile, JSON.stringify({ enabled: false }));
     } catch {
@@ -215,6 +233,16 @@ export default class SidecarAgentPlugin extends Plugin {
       // Reports the session id after /clear or an in-app /resume, so the panel follows the new session.
       const sHook = this.writeHelperScript("session_hook.py", SESSION_HOOK_PY);
       if (sHook) (extra.hooks ||= {}).SessionStart = [{ hooks: [{ type: "command", command: sHook, timeout: 5 }] }];
+      // Working / waiting / done per session (tab dots, notifications, reload when idle).
+      const stHook = this.writeHelperScript("state_hook.py", STATE_HOOK_PY);
+      if (stHook) {
+        const h = (extra.hooks ||= {});
+        const entry = { type: "command", command: stHook, timeout: 5 };
+        for (const ev of ["UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "Stop", "StopFailure", "Notification"]) {
+          h[ev] = h[ev] || [{ hooks: [] }];
+          h[ev][0].hooks.push(entry);
+        }
+      }
       if (s.claudeTheme === "ansi") extra.theme = this.writeClaudeTheme() || (isDarkTheme() ? "dark-ansi" : "light-ansi");
       args.push("--settings", JSON.stringify(extra));
       if (s.claudePermissionMode) args.push("--permission-mode", s.claudePermissionMode);
@@ -445,16 +473,7 @@ export default class SidecarAgentPlugin extends Plugin {
       const buf = Buffer.alloc(len);
       fs.readSync(fd, buf, 0, len, st.size - len);
       fs.closeSync(fd);
-      const lines = buf.toString("utf8").split("\n");
-      for (let i = lines.length - 1; i >= 0 && !rec; i--) {
-        if (!lines[i].includes('"input_tokens"')) continue;
-        try {
-          const d = JSON.parse(lines[i]);
-          if (d.input_tokens != null) rec = { at: Date.parse(d.created_at) || st.mtimeMs, used_tokens: (d.input_tokens || 0) + (d.cache_read_tokens || 0) };
-        } catch {
-          // first line of the chunk may be cut off
-        }
-      }
+      rec = agyTail(buf.toString("utf8"), st.mtimeMs);
     } catch (e) {
       console.warn("[sidecar-agent] agy context", e);
     }
@@ -468,8 +487,16 @@ export default class SidecarAgentPlugin extends Plugin {
     for (const s of this.terminals) {
       if (s.st.agent !== "agy" || !s.running || !s.st.sessionId) continue;
       const before = this.agyCtx.get(s.st.sessionId)?.mtime;
-      this.readAgyContext(s.st.sessionId);
-      if (this.agyCtx.get(s.st.sessionId)?.mtime !== before) changed = true;
+      const rec = this.readAgyContext(s.st.sessionId);
+      const mtime = this.agyCtx.get(s.st.sessionId)?.mtime;
+      if (mtime !== before) {
+        changed = true;
+        // Antigravity has no hooks: the transcript tells whether the last step finished the answer.
+        // First look at a transcript written since the start: an answer may already be complete.
+        if (!rec || (before === undefined && mtime < s.startedAt)) continue;
+        if (rec.final && !s.agentState) s.setAgentState("busy", "", { quiet: true });
+        s.setAgentState(rec.final ? "done" : "busy", rec.final ? rec.text : "");
+      }
     }
     if (changed) this.trigger("context-changed");
   }
@@ -564,7 +591,247 @@ export default class SidecarAgentPlugin extends Plugin {
     this.readClaudeLimits();
     if ([...this.terminals].some((s) => s.st.agent === "agy")) this.refreshAgyLimits();
     if (this.settings.autoResume) for (const s of this.terminals) if (s.st.agent === "claude" && s.running) this.checkUsageLimit(s);
+    this.verifyBusy();
     this.trigger("terminals-changed");
+  }
+
+  /**
+   * An interrupt with Esc ends a turn without a Stop hook. Every 30 s, sessions that still count as
+   * working are checked against `claude agents --json`; twice not busy there means the turn is over.
+   */
+  async verifyBusy() {
+    const busy = [...this.terminals].filter((s) => s.st.agent === "claude" && s.running && s.agentState === "busy" && Date.now() - s.stateAt > 20000);
+    if (!busy.length) return;
+    const agents = await this.claudeAgents();
+    if (!agents.length) return;
+    for (const s of busy) {
+      const a = agents.find((x) => x.sessionId === s.st.sessionId);
+      if (a && a.status === "busy") {
+        s.idleChecks = 0;
+        continue;
+      }
+      s.idleChecks = (s.idleChecks || 0) + 1;
+      if (s.idleChecks >= 2) s.setAgentState("idle", "", { quiet: true });
+    }
+  }
+
+  // ---------------------------------------------------------------- session state, notifications
+  /** Is the user looking at this session right now (active tab, panel visible, Obsidian in front)? */
+  isSeen(s) {
+    const panel = this.panel;
+    if (!s || !panel || panel.active !== s) return false;
+    if (!panel.contentEl?.isShown?.() && !panel.contentEl?.offsetParent) return false;
+    return document.hasFocus() && document.visibilityState === "visible";
+  }
+
+  markSeen(s) {
+    if (!s?.unseen || !this.isSeen(s)) return;
+    s.unseen = false;
+    this.trigger("terminals-changed");
+  }
+
+  /** Called by a session when its state changes (hooks for Claude, transcript for Antigravity). */
+  onAgentState(s, prev, next, msg) {
+    if (next === "waiting" || (next === "done" && (prev === "busy" || prev === "waiting"))) {
+      if (!this.isSeen(s)) {
+        s.unseen = true;
+        this.notify(s, next, msg);
+      }
+    }
+    if (this.reloadPending) this.checkReload();
+    this.trigger("terminals-changed");
+  }
+
+  /** System notification (outside Obsidian or another tab) or a Notice (Obsidian in front). */
+  notify(s, state, msg) {
+    const mode = this.settings.notify || "unseen";
+    if (mode === "off") return;
+    const title = t(state === "waiting" ? "notify.waiting" : "notify.done", { agent: AGENTS[s.st.agent]?.short || "Agent", title: s.title() });
+    const body = String(msg || "")
+      .replace(/[#*_`>]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160);
+    if (document.hasFocus()) {
+      const n = new Notice(`${title}${body ? "\n" + body : ""}`, 8000);
+      n.noticeEl?.addEventListener("click", () => this.reveal(s));
+      return;
+    }
+    try {
+      const n = new window.Notification(title, { body, silent: false });
+      n.onclick = () => {
+        this.bringToFront();
+        this.reveal(s);
+      };
+    } catch (e) {
+      console.warn("[sidecar-agent] notification", e);
+    }
+  }
+
+  bringToFront() {
+    try {
+      const win = window.require?.("electron")?.remote?.getCurrentWindow?.();
+      if (win) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        return;
+      }
+    } catch {
+      // no remote module: plain focus below
+    }
+    window.focus();
+  }
+
+  /** Claude switched to paid usage credits after a limit (seen in its status area). */
+  onCredits(s) {
+    const title = t("credits.notice", { title: s.title() });
+    new Notice(`💳 ${title}`, 15000);
+    if (!document.hasFocus()) {
+      try {
+        new window.Notification(t("credits.title"), { body: title });
+      } catch {
+        // notifications not available
+      }
+    }
+    this.trigger("terminals-changed");
+  }
+
+  // ---------------------------------------------------------------- compact
+  async compact(s, focus) {
+    if (!s?.running || s.st.agent !== "claude") return;
+    if (s.agentState === "busy" || (await this.claudeBusy(s.st.sessionId))) {
+      new Notice(t("notice.compactBusy"));
+      return;
+    }
+    s.submit(focus ? `/compact ${focus}` : "/compact");
+    new Notice(t("notice.compacting", { title: s.title() }));
+  }
+
+  compactWithFocus(s) {
+    new TextModal(this.app, {
+      title: t("modal.compactTitle"),
+      desc: t("modal.compactDesc"),
+      value: "",
+      onSubmit: (v) => this.compact(s, v.trim()),
+    }).open();
+  }
+
+  contextMenu(s, ev) {
+    const m = new Menu();
+    m.addItem((i) =>
+      i
+        .setTitle(t("menu.compact"))
+        .setIcon("fold-vertical")
+        .onClick(() => this.compact(s)),
+    );
+    m.addItem((i) =>
+      i
+        .setTitle(t("menu.compactFocus"))
+        .setIcon("fold-vertical")
+        .onClick(() => this.compactWithFocus(s)),
+    );
+    m.showAtMouseEvent(ev);
+  }
+
+  // ---------------------------------------------------------------- reload when idle
+  /**
+   * Reloads the plugin as soon as no session is working. A plugin reload ends all panel terminals
+   * (they come back via --resume), so reloading in the middle of an answer would cut it off. An agent
+   * in a panel session can trigger this itself: the reload waits until its own turn has ended.
+   */
+  reloadWhenIdle() {
+    if (this.reloadPending) {
+      new Notice(t("notice.reloadAlready"));
+      return;
+    }
+    this.reloadPending = { since: Date.now(), idleSince: 0 };
+    new Notice(t("notice.reloadWaiting"));
+    this.trigger("terminals-changed");
+    this.checkReload();
+  }
+
+  cancelReload() {
+    if (!this.reloadPending) return;
+    window.clearTimeout(this.reloadPending.timer);
+    this.reloadPending = null;
+    new Notice(t("notice.reloadCancelled"));
+    this.trigger("terminals-changed");
+  }
+
+  /** Sessions that are producing an answer or wait for a permission (a reload would cut them off). */
+  async workingSessions() {
+    const out = [];
+    let agents = null;
+    for (const s of this.terminals) {
+      if (!s.running) continue;
+      if (s.agentState === "busy" || s.agentState === "waiting") {
+        out.push(s);
+        continue;
+      }
+      if (s.st.agent === "claude") {
+        agents = agents || (await this.claudeAgents());
+        if (agents.some((x) => x.sessionId === s.st.sessionId && x.status === "busy")) out.push(s);
+      }
+    }
+    return out;
+  }
+
+  async checkReload() {
+    const r = this.reloadPending;
+    if (!r || r.checking) return;
+    r.checking = true;
+    window.clearTimeout(r.timer);
+    let working;
+    try {
+      working = await this.workingSessions();
+    } finally {
+      r.checking = false;
+    }
+    if (this.reloadPending !== r) return;
+    if (working.length) {
+      r.idleSince = 0;
+      r.waitingFor = working.map((s) => s.title());
+    } else if (!r.idleSince) {
+      r.idleSince = Date.now();
+    } else if (Date.now() - r.idleSince >= 4000) {
+      return this.doReload();
+    }
+    this.trigger("terminals-changed");
+    r.timer = window.setTimeout(() => this.checkReload(), 2000);
+  }
+
+  doReload() {
+    this.reloadPending = null;
+    const plugins = this.app.plugins;
+    const id = this.manifest.id;
+    this.app.workspace.requestSaveLayout?.();
+    // Runs after this instance is gone, so it must not depend on the plugin object.
+    window.setTimeout(async () => {
+      try {
+        await plugins.disablePlugin(id);
+        await plugins.enablePlugin(id);
+      } catch (e) {
+        console.error("[sidecar-agent] reload", e);
+        new Notice(`Sidecar Agent: ${e.message}`);
+      }
+    }, 600);
+  }
+
+  /** Per-terminal files (session id, state) of earlier Obsidian runs. */
+  cleanupStaleFiles() {
+    try {
+      const old = Date.now() - 86400000;
+      for (const f of fs.readdirSync(CACHE_DIR)) {
+        if (!/^(session|state)-\d+-\d+\.json$/.test(f)) continue;
+        const pid = Number(f.split("-")[1]);
+        const p = path.join(CACHE_DIR, f);
+        if (pid === process.pid) continue;
+        if (fs.statSync(p).mtimeMs < old) fs.rmSync(p, { force: true });
+      }
+    } catch {
+      // cache folder missing: nothing to clean up
+    }
   }
 
   /**
@@ -587,29 +854,8 @@ export default class SidecarAgentPlugin extends Plugin {
     } catch {
       return;
     }
-    let idx = -1;
-    for (let i = tail.length - 1; i >= 0; i--) {
-      if (tail[i].includes('"apiError":"usage_limit_reached"')) {
-        idx = i;
-        break;
-      }
-    }
-    if (idx < 0) return;
-    let rec;
-    try {
-      rec = JSON.parse(tail[idx]);
-    } catch {
-      return;
-    }
-    // Already continued afterwards (new question or answer)? Then do nothing.
-    for (let i = idx + 1; i < tail.length; i++) {
-      try {
-        const d = JSON.parse(tail[i]);
-        if ((d.type === "user" && !d.isMeta) || (d.type === "assistant" && !d.isApiErrorMessage && !String(tail[i]).includes("usage_limit_reached"))) return;
-      } catch {
-        // incomplete line
-      }
-    }
+    const rec = findUsageLimit(tail);
+    if (!rec) return;
     const limitAt = Date.parse(rec.timestamp) || Date.now();
     if (this.handledLimits?.has(`${key}@${limitAt}`)) return;
     const text = JSON.stringify(rec.message?.content || "");
@@ -727,6 +973,15 @@ export default class SidecarAgentPlugin extends Plugin {
   async reveal(session) {
     const panel = await this.activatePanel(true);
     panel?.activate(session);
+  }
+
+  /** Antigravity conversations started here: listed even when agy stored no working folder for them. */
+  rememberAgyConversation(id) {
+    const ids = (this.settings.agyIds ||= []);
+    if (!id || ids.includes(id)) return;
+    ids.push(id);
+    if (ids.length > 2000) ids.splice(0, ids.length - 2000);
+    this.saveSettings();
   }
 
   setActiveTerminal(v) {
@@ -987,56 +1242,54 @@ export default class SidecarAgentPlugin extends Plugin {
     if (txt) insert(txt);
   }
 
-  /** Antigravity has no --session-id: find the new conversation in its database after the start. */
-  async detectAgyConversation(view) {
+  /**
+   * Antigravity has no --session-id: find the new conversation after the start. Candidates come from its
+   * database (working folder = vault, started after us) and, because agy often stores no folder there
+   * (outside git repositories), from its "last conversation per folder" file. Several new agy sessions
+   * can start at once (e.g. after a reload), so a candidate is only taken when its first prompt matches
+   * ours, or, without a prompt of our own, when no other unidentified session could own it.
+   */
+  async detectAgyConversation(view, lastBefore) {
     const started = view.startedAt;
     const vaultUri = `file://${this.vaultPath}`;
-    const claimed = () => new Set([...this.terminals].filter((v) => v !== view && v.st.agent === "agy").map((v) => v.st.sessionId));
+    const norm = (x) => String(x || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const want = norm(view.agyPrompt);
+    const others = () => [...this.terminals].filter((v) => v !== view && v.st.agent === "agy");
+    const fits = (id) => {
+      if (others().some((v) => v.st.sessionId === id)) return false;
+      const first = norm(agyFirstInput(id));
+      if (want) return !!first && first.includes(want);
+      if (!first) return true; // nothing typed yet anywhere: only possible for us or another empty one
+      const rivals = others().filter((v) => v.running && !v.st.sessionId);
+      return !rivals.some((v) => norm(v.agyPrompt) && first.includes(norm(v.agyPrompt))) && rivals.filter((v) => !norm(v.agyPrompt)).length === 0;
+    };
     for (let i = 0; i < 300 && view.running && !view.st.sessionId; i++) {
       await new Promise((r) => window.setTimeout(r, 2000));
-      if (!fs.existsSync(AGY_DB)) continue;
-      try {
-        const q =
-          "select conversation_id, workspace_uris, last_user_input_time from conversation_summaries where parent_conversation_id='' order by last_user_input_time desc limit 10";
-        const { stdout } = await run("/usr/bin/sqlite3", ["-readonly", "-separator", "\t", AGY_DB, q], { timeout: 5000 });
-        const taken = claimed();
-        for (const line of stdout.split("\n")) {
-          const [id, ws, ts0] = line.split("\t");
-          if (!id || taken.has(id) || !ws?.includes(`"${vaultUri}"`)) continue;
-          const ts = Date.parse((ts0 || "").replace(" ", "T").replace(/(\.\d{3})\d+/, "$1"));
-          if (ts && ts >= started - 5000) {
-            view.setSessionId(id);
-            this.store.scheduleRefresh(1000);
-            return;
+      const cands = [];
+      const last = agyLastConversation(this.vaultPath);
+      if (last && last !== lastBefore) cands.push(last);
+      if (fs.existsSync(AGY_DB)) {
+        try {
+          const q =
+            "select conversation_id, workspace_uris, last_user_input_time from conversation_summaries where parent_conversation_id='' order by last_user_input_time desc limit 10";
+          const { stdout } = await run("/usr/bin/sqlite3", ["-readonly", "-separator", "\t", AGY_DB, q], { timeout: 5000 });
+          for (const line of stdout.split("\n")) {
+            const [id, ws, ts0] = line.split("\t");
+            if (!id || !ws?.includes(`"${vaultUri}"`)) continue;
+            const ts = Date.parse((ts0 || "").replace(" ", "T").replace(/(\.\d{3})\d+/, "$1"));
+            if (ts && ts >= started - 5000) cands.push(id);
           }
+        } catch (e) {
+          console.warn("[sidecar-agent] agy detection", e);
         }
-      } catch (e) {
-        console.warn("[sidecar-agent] agy detection", e);
+      }
+      const id = cands.find(fits);
+      if (id && view.running && !view.st.sessionId) {
+        view.setSessionId(id);
+        this.store.scheduleRefresh(1000);
+        return;
       }
     }
   }
-}
 
-/** Timestamp (seconds, milliseconds or ISO) to milliseconds. */
-function toMs(v) {
-  if (v == null) return null;
-  if (typeof v === "number") return v < 1e12 ? v * 1000 : v;
-  const ts = Date.parse(v);
-  return Number.isNaN(ts) ? null : ts;
-}
-
-/** Turns "resets 4:20pm (Europe/Berlin)" or "resets Oct 24, 10am" into a time after limitAt. */
-function parseResetText(text, limitAt) {
-  const m = text.match(/resets\s+(?:([A-Z][a-z]{2})\s+(\d{1,2}),?\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
-  if (!m) return null;
-  let h = Number(m[3]) % 12;
-  if (m[5].toLowerCase() === "pm") h += 12;
-  const d = new Date(limitAt);
-  if (m[1]) {
-    const mon = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(m[1].toLowerCase());
-    if (mon >= 0) d.setMonth(mon, Number(m[2]));
-  }
-  d.setHours(h, Number(m[4] || 0), 0, 0);
-  if (d.getTime() < limitAt) d.setDate(d.getDate() + 1);
-  return d.getTime();
 }

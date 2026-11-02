@@ -7,7 +7,7 @@ import { t, locale } from "./i18n";
 
 export const VIEW_PANEL = "sidecar-agent-panel";
 
-const FILTERS = ["all", "open", "claude", "agy"];
+const FILTERS = ["all", "open", "note", "claude", "agy"];
 const PAGE = 150;
 
 function iconBtn(parent, icon, label, onClick, cls = "") {
@@ -115,6 +115,7 @@ export class AgentPanelView extends ItemView {
     for (const id of FILTERS) {
       const c = chips.createEl("button", { cls: "sa-chip", text: t(`filter.${id}`) });
       if (id === "open") c.setAttr("aria-label", t("filter.openTip"));
+      if (id === "note") c.setAttr("aria-label", t("filter.noteTip"));
       c.onclick = () => {
         this.filter = id;
         this.limit = PAGE;
@@ -246,6 +247,7 @@ export class AgentPanelView extends ItemView {
       this.active.reader?.hide();
     }
     this.active = s;
+    s.unseen = false;
     this.plugin.setActiveTerminal(s);
     if (s.st.agent === "agy") this.plugin.refreshAgyLimits();
     else this.plugin.readClaudeLimits();
@@ -330,7 +332,20 @@ export class AgentPanelView extends ItemView {
   }
 
   stateLabel(s) {
+    if (s.running && (s.agentState === "busy" || s.agentState === "waiting")) return t(`agentState.${s.agentState}`);
+    if (s.running && s.unseen && s.agentState === "done") return t("agentState.doneUnseen");
     return s.running ? t("state.running") : s.exited ? t("state.ended") : t("state.notStarted");
+  }
+
+  /** Small state dot: working (pulsing), waiting for you (orange), finished while you were away (accent). */
+  stateDot(parent, s) {
+    if (!s.running) return;
+    let cls = "";
+    if (s.agentState === "waiting") cls = "is-waiting";
+    else if (s.agentState === "busy") cls = "is-busy";
+    else if (s.unseen) cls = "is-unseen";
+    if (!cls) return;
+    parent.createSpan({ cls: `sa-state ${cls}`, attr: { "aria-label": this.stateLabel(s) } });
   }
 
   renderTabs() {
@@ -356,6 +371,7 @@ export class AgentPanelView extends ItemView {
       const tab = el.createDiv({ cls: `sa-tab sa-${s.st.agent}${s === this.active ? " is-active" : ""}${s.running ? " is-running" : ""}` });
       setIcon(tab.createSpan({ cls: "sa-tab-icon" }), AGENTS[s.st.agent]?.icon || "terminal");
       tab.createSpan({ cls: "sa-tab-title", text: s.title() });
+      this.stateDot(tab, s);
       tab.setAttr("aria-label", `${s.title()} · ${this.stateLabel(s)}`);
       const x = tab.createSpan({ cls: "sa-tab-close" });
       setIcon(x, "x");
@@ -403,7 +419,7 @@ export class AgentPanelView extends ItemView {
       el.createSpan({ cls: "sa-info-muted", text: t("panel.empty") });
       return;
     }
-    const dot = el.createSpan({ cls: `sa-dot ${s.running ? "is-running" : s.exited ? "is-exited" : ""}` });
+    const dot = el.createSpan({ cls: `sa-dot ${s.running ? "is-running" : s.exited ? "is-exited" : ""}${s.running && s.agentState === "busy" ? " is-busy" : ""}${s.running && s.agentState === "waiting" ? " is-waiting" : ""}` });
     dot.setAttr("aria-label", this.stateLabel(s));
     setIcon(el.createSpan({ cls: "sa-info-icon" }), AGENTS[s.st.agent]?.icon || "terminal");
     const name = el.createSpan({ cls: "sa-info-name", text: s.title() });
@@ -423,13 +439,27 @@ export class AgentPanelView extends ItemView {
     const bits = [];
     const e = s.entry();
     if (e?.messages) bits.push(this.countLabel(s.st.agent, e.messages));
-    bits.push(s.running ? t("state.running") : s.exited ? t("info.endedHint") : t("state.starting"));
+    bits.push(s.running ? this.stateLabel(s) : s.exited ? t("info.endedHint") : t("state.starting"));
     // Usage limits and scheduled resume
     const pend = this.plugin.pending?.get(s.key);
     if (pend) {
       const w = el.createSpan({ cls: "sa-limit is-wait", text: `⏳ ${t("info.resumeAt", { time: hhmm(pend.at) })}` });
       w.setAttr("aria-label", t("info.resumeTip"));
       w.onclick = () => this.plugin.cancelPending(s);
+    }
+    const rl = this.plugin.reloadPending;
+    if (rl) {
+      const w = el.createSpan({ cls: "sa-limit is-wait", text: `↻ ${t("info.reloadWaiting")}` });
+      w.setAttr("aria-label", t("info.reloadTip", { list: rl.waitingFor?.join(", ") || "–" }));
+      w.onclick = () => this.plugin.cancelReload();
+    }
+    if (s.credits) {
+      const c = el.createSpan({ cls: "sa-limit is-crit sa-credits", text: `💳 ${t("credits.chip")}` });
+      c.setAttr("aria-label", t("credits.tip", { time: hhmm(s.credits) }));
+      c.onclick = () => {
+        s.credits = 0;
+        s.changed();
+      };
     }
     if (s.st.agent === "claude") this.renderContext(el, s);
     else if (s.st.agent === "agy") this.renderAgyContext(el, s);
@@ -474,13 +504,24 @@ export class AgentPanelView extends ItemView {
     if (!c || c.used_percentage == null) return;
     const pct = Math.max(0, Math.min(100, Math.round(c.used_percentage)));
     const lvl = pct >= 85 ? " is-crit" : pct >= 65 ? " is-warn" : "";
-    const chip = el.createSpan({ cls: `sa-context${lvl}` });
+    const chip = el.createSpan({ cls: `sa-context clickable${lvl}` });
+    chip.onclick = (ev) => this.plugin.contextMenu(s, ev);
     setIcon(chip.createSpan({ cls: "sa-chip-icon" }), "brain");
     const bar = chip.createSpan({ cls: "sa-context-bar" });
     bar.createSpan({ cls: "sa-context-fill" }).style.width = `${pct}%`;
     chip.createSpan({ cls: "sa-context-pct", text: `${pct} %` });
     const k = (n) => (n == null ? "?" : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
     chip.setAttr("aria-label", t("context.tip", { pct, used: k(c.used_tokens ?? (c.size ? (pct / 100) * c.size : null)), size: k(c.size) }));
+    if (pct >= 85 && s.running) {
+      const b = el.createEl("button", { cls: "sa-compact-btn", attr: { "aria-label": t("context.compactTip") } });
+      setIcon(b.createSpan({ cls: "sa-chip-icon" }), "fold-vertical");
+      b.createSpan({ text: t("context.compact") });
+      b.onclick = (ev) => {
+        ev.stopPropagation();
+        if (ev.altKey) this.plugin.compactWithFocus(s);
+        else this.plugin.compact(s);
+      };
+    }
   }
 
   /** Antigravity: absolute token count only, agy reports no context window size. */
@@ -533,6 +574,10 @@ export class AgentPanelView extends ItemView {
     const openKeys = this.plugin.openKeys();
     let list = store.sessions;
     if (this.filter === "open") list = list.filter((e) => openKeys.has(e.key));
+    else if (this.filter === "note") {
+      const note = this.plugin.ctxPath;
+      list = note ? list.filter((e) => store.touches(e, note)) : [];
+    }
     else if (this.filter !== "all") list = list.filter((e) => e.agent === this.filter);
     if (this.query) list = list.filter((e) => store.matches(e, this.query) || (this.fulltext && this.ftKeys && this.ftKeys.has(e.key)));
     return { list, openKeys };
@@ -547,7 +592,8 @@ export class AgentPanelView extends ItemView {
     this.listEl.empty();
     if (store.loaded) {
       const ftInfo = this.fulltext && this.query && this.query.length < 3 ? ` · ${t("panel.fulltextMin")}` : "";
-      this.setStatus(t("panel.count", { n: list.length, total: store.sessions.length }) + ftInfo);
+      const noteInfo = this.filter === "note" ? ` · ${this.plugin.ctxPath ? this.plugin.ctxPath.split("/").pop().replace(/\.md$/, "") : t("ctx.noNote")}` : "";
+      this.setStatus(t("panel.count", { n: list.length, total: store.sessions.length }) + noteInfo + ftInfo);
     }
     let lastGroup = null;
     for (const e of list.slice(0, this.limit)) {

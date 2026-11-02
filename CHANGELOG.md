@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0
+
+- Session state on the tabs and in the info line: working (pulsing), waiting for you (permission or question), finished while you were looking elsewhere. Claude reports it through hooks (plugin sessions only), Antigravity through its transcript.
+- Notifications when a session finishes or waits for you and you are not looking at it: a notice in Obsidian, a system notification when Obsidian is in the background. Clicking it opens the session. Setting "Notifications".
+- New command "Reload plugin when no session is working": waits until no answer is running, then reloads. A reload ends the panel terminals, this keeps it from cutting off an answer. An agent in a panel session can trigger it itself.
+- Warning when Claude switches to paid usage credits after a limit: red chip in the info line and a notice.
+- Compact from the context chip (now or with a focus), a compact button from 85 %, and a command.
+- New filter "This note": the sessions that read or edited the note shown in the editor. The index now records the vault files each session touched (tools, shell commands, `@` mentions), for Claude and Antigravity. The first index run after the update takes a little longer.
+- Copying in Claude's fullscreen view: its mouse selection (OSC 52) now reaches the clipboard.
+- Antigravity: new conversations are found reliably. agy often stores no working folder (outside git repositories), so the plugin also uses agy's last conversation per folder and checks the first prompt, so two sessions started at once do not swap conversations. Conversations started in the panel stay in the list.
+- Full-text search without ripgrep is now case-insensitive for umlauts too.
+- Tests for the parsers and hooks, and a pre-release check against the installed Claude Code and the newest local sessions.
+
 ## 1.3.0
 
 - Context size for Antigravity sessions in the info line: tokens in the context after the last answer, read from the conversation transcript (`input_tokens + cache_read_tokens`), refreshed every 5 s while the session runs. Shown as an absolute number without bar or percentage, because Antigravity does not report the size of the context window.

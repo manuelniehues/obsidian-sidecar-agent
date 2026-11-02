@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   agySkipPermissions: false,
   agyRemoteControl: false,
   agyDefaultModel: "", // "" = agy's own default, "newest-flash" = newest Flash model, otherwise a model id
+  notify: "unseen", // unseen | off
   autoResume: true,
   autoResumeMessage: "",
   noteContext: true,
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS = {
   layout: { top: 280, bottom: 150, topCollapsed: false },
   aliases: {},
   agyModelsCache: null,
+  agyIds: [], // Antigravity conversations started in this vault (agy often stores no working folder)
 };
 
 export class SidecarSettingTab extends PluginSettingTab {
@@ -97,6 +99,19 @@ export class SidecarSettingTab extends PluginSettingTab {
       .setName(t("set.noteContext"))
       .setDesc(t("set.noteContextDesc"))
       .addToggle((tg) => tg.setValue(s.noteContext !== false).onChange(() => p.toggleNoteContext()));
+    new Setting(el)
+      .setName(t("set.notify"))
+      .setDesc(t("set.notifyDesc"))
+      .addDropdown((d) =>
+        d
+          .addOption("unseen", t("set.notifyUnseen"))
+          .addOption("off", t("set.notifyOff"))
+          .setValue(s.notify || "unseen")
+          .onChange((v) => {
+            s.notify = v;
+            save();
+          }),
+      );
     new Setting(el)
       .setName(t("set.focusLock"))
       .setDesc(t("set.focusLockDesc"))

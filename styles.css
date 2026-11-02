@@ -695,3 +695,80 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-modal .sa-grow {
   flex: 1;
 }
+
+/* Session state: working (pulsing), waiting for you, finished while you were away */
+.sidecar-agent-panel .sa-state {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.sidecar-agent-panel .sa-state.is-busy {
+  background: color-mix(in srgb, var(--interactive-accent) 70%, transparent);
+  animation: sa-pulse 1.4s ease-in-out infinite;
+}
+.sidecar-agent-panel .sa-state.is-waiting {
+  background: var(--color-orange);
+}
+.sidecar-agent-panel .sa-state.is-unseen {
+  background: var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-agy .sa-state.is-busy {
+  background: color-mix(in srgb, var(--sa-agy-color) 70%, transparent);
+}
+.sidecar-agent-panel .sa-agy .sa-state.is-unseen {
+  background: var(--sa-agy-color);
+}
+.sidecar-agent-panel .sa-dot.is-busy {
+  animation: sa-pulse 1.4s ease-in-out infinite;
+}
+.sidecar-agent-panel .sa-dot.is-waiting {
+  background: var(--color-orange);
+}
+@keyframes sa-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidecar-agent-panel .sa-state.is-busy,
+  .sidecar-agent-panel .sa-dot.is-busy {
+    animation: none;
+  }
+}
+
+/* Context chip opens the compact menu; button from 85 % */
+.sidecar-agent-panel .sa-context.clickable {
+  cursor: pointer;
+}
+.sidecar-agent-panel .sa-context.clickable:hover {
+  background: var(--background-modifier-active-hover);
+}
+.sidecar-agent-panel .sa-compact-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 10%, transparent);
+  box-shadow: none;
+  cursor: pointer;
+}
+.sidecar-agent-panel .sa-compact-btn:hover {
+  background: color-mix(in srgb, var(--color-red) 18%, transparent);
+}
+.sidecar-agent-panel .sa-compact-btn .sa-chip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.sidecar-agent-panel .sa-credits {
+  cursor: pointer;
+}

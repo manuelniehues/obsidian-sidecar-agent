@@ -4,8 +4,9 @@ import os from "os";
 import path from "path";
 import { Events } from "obsidian";
 import INDEXER from "./py/indexer.py";
-import { AGY_DB, CACHE_DIR, claudeProjectDir, run, vaultHash } from "./util";
+import { AGY_DB, CACHE_DIR, agyLastConversation, claudeProjectDir, run, vaultHash } from "./util";
 import { t } from "./i18n";
+import { touchesFile } from "./transcript";
 
 export class SessionStore extends Events {
   constructor(plugin) {
@@ -18,6 +19,11 @@ export class SessionStore extends Events {
     this.pendingRefresh = false;
     this.watchers = [];
     this.watchTimer = null;
+  }
+
+  /** Antigravity conversations of this vault that agy stored without a working folder. */
+  agyIds() {
+    return [...(this.plugin.settings.agyIds || []), agyLastConversation(this.plugin.vaultPath)].filter(Boolean);
   }
 
   get paths() {
@@ -45,7 +51,7 @@ export class SessionStore extends Events {
     }
     this.refreshing = (async () => {
       try {
-        const raw = await this.python({ mode: "index", ...this.paths });
+        const raw = await this.python({ mode: "index", ...this.paths, agyIds: this.agyIds() });
         this.merge(raw);
         this.loaded = true;
         this.trigger("changed");
@@ -79,6 +85,7 @@ export class SessionStore extends Events {
         customTitle: c.customTitle,
         aiTitle: c.aiTitle,
         messages: c.userMessages,
+        files: c.files || [],
       });
     }
     for (const a of raw.agy || []) {
@@ -92,6 +99,7 @@ export class SessionStore extends Events {
         title: a.title,
         firstPrompt: a.preview,
         messages: a.steps,
+        files: a.files || [],
       });
     }
     out.sort((a, b) => (b.updated || 0) - (a.updated || 0));
@@ -118,6 +126,11 @@ export class SessionStore extends Events {
       .split(/\s+/)
       .filter(Boolean)
       .every((w) => hay.includes(w));
+  }
+
+  /** Did this session read or edit the vault file (see touchesFile)? */
+  touches(e, filePath) {
+    return touchesFile(e.files, filePath);
   }
 
   /** Full-text search across all session files (ripgrep or the Antigravity FTS index). */

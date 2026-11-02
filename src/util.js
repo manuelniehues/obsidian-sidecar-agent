@@ -35,6 +35,38 @@ export function claudeProjectDir(cwd) {
 
 export const AGY_DIR = path.join(HOME, ".gemini", "antigravity-cli");
 export const AGY_DB = path.join(AGY_DIR, "conversation_summaries.db");
+
+/** First user prompt of an Antigravity conversation (from its transcript), "" if there is none yet. */
+export function agyFirstInput(id) {
+  try {
+    const f = path.join(AGY_DIR, "brain", id, ".system_generated", "logs", "transcript.jsonl");
+    const fd = fs.openSync(f, "r");
+    const buf = Buffer.alloc(64 * 1024);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    for (const line of buf.toString("utf8", 0, n).split("\n")) {
+      if (!line.includes('"USER_INPUT"')) continue;
+      const c = JSON.parse(line).content || "";
+      const m = c.match(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/);
+      return m ? m[1] : c;
+    }
+  } catch {
+    // no transcript yet
+  }
+  return "";
+}
+
+/**
+ * Antigravity's last conversation per working folder (cache/last_conversations.json). The database only
+ * stores the folder for some conversations (often empty outside a git repository), this file always has it.
+ */
+export function agyLastConversation(folder) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(AGY_DIR, "cache", "last_conversations.json"), "utf8"))[folder] || "";
+  } catch {
+    return "";
+  }
+}
 /** Everything the plugin writes lives in these two folders (plus the Claude theme file). */
 export const CACHE_DIR = path.join(HOME, "Library", "Caches", "sidecar-agent");
 export const SUPPORT_DIR = path.join(HOME, "Library", "Application Support", "sidecar-agent");

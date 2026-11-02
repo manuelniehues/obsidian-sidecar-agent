@@ -1,6 +1,7 @@
 {
   "name": "obsidian-sidecar-agent",
-  "version": "1.3.0",
+  "version": "1.4.0",
+  "type": "module",
   "description": "Obsidian plugin: Claude Code and Antigravity in a real terminal in the sidebar.",
   "private": true,
   "license": "MIT",
@@ -9,8 +10,10 @@
     "build": "node scripts/build.mjs",
     "lint": "eslint src",
     "format": "prettier --write src styles.css",
-    "check": "node scripts/check-i18n.mjs && npm run lint && npm run build",
-    "release": "scripts/release.sh"
+    "check": "node scripts/check-i18n.mjs && npm run lint && npm test && npm run build",
+    "release": "scripts/release.sh",
+    "test": "node --test tests/",
+    "compat": "node scripts/compat-check.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",

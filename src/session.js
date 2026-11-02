@@ -10,8 +10,9 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import PTY_HELPER from "./py/pty_helper.py";
 import fs from "fs";
 import path from "path";
-import { AGENTS, CACHE_DIR, buildEnv, mention } from "./util";
+import { AGENTS, CACHE_DIR, agyLastConversation, buildEnv, mention } from "./util";
 import { t } from "./i18n";
+import { creditsShown, osc52Text } from "./transcript";
 
 // Processes that are shutting down. Kept on window so it survives a plugin reload.
 // Resuming the same session waits for them, otherwise the old process would keep e.g. Remote Control.
@@ -122,6 +123,17 @@ export function themeFromObsidian() {
   };
 }
 
+/** Write text to the system clipboard; Electron's clipboard as a fallback when the page has no focus. */
+export function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).catch(() => {
+    try {
+      window.require?.("electron")?.clipboard?.writeText(text);
+    } catch (e) {
+      console.warn("[sidecar-agent] clipboard", e);
+    }
+  });
+}
+
 export const DEFAULT_FONT = '"SF Mono", SFMono-Regular, Menlo, Monaco, monospace';
 
 let SEQ = 0;
@@ -140,6 +152,11 @@ export class TerminalSession {
     this.lastSize = "";
     this.el = null;
     this.visible = false;
+    this.agentState = null; // busy | waiting | done | idle (hooks for Claude, transcript for Antigravity)
+    this.stateAt = 0;
+    this.stateMsg = "";
+    this.unseen = false; // finished or waiting while the user was not looking
+    this.credits = 0; // time Claude was seen switching to usage credits
   }
 
   // ------------------------------------------------------------ display
@@ -234,15 +251,24 @@ export class TerminalSession {
       this.input("\x1b[1;5H"); // Ctrl+Home = "scroll:top" in Claude Code's fullscreen view
       this.term?.focus();
     });
-    this.term.onRender(() => this.checkJumpSoon());
+    this.term.onRender(() => this.checkScreenSoon());
+    // Claude Code copies its own mouse selection (fullscreen view) with OSC 52: put it on the clipboard
+    this.term.parser.registerOscHandler(52, (data) => {
+      const text = osc52Text(data);
+      if (text) copyToClipboard(text);
+      return true;
+    });
     this.resizeObs = new ResizeObserver(() => this.scheduleFit());
     this.resizeObs.observe(this.el);
     this.el.addEventListener("dragover", (ev) => ev.preventDefault());
     this.el.addEventListener("drop", (ev) => this.plugin.handleDrop(ev, (t) => this.sendText(t)));
   }
 
-  /** Show "Jump to top" while Claude Code shows its own "Jump to bottom" hint (scrolled up). */
-  checkJumpSoon() {
+  /**
+   * After drawing: show "Jump to top" while Claude Code shows its own "Jump to bottom" hint (scrolled up),
+   * and notice when Claude's footer says it now runs on usage credits.
+   */
+  checkScreenSoon() {
     if (this.jumpTimer) return;
     this.jumpTimer = window.setTimeout(() => {
       this.jumpTimer = 0;
@@ -251,6 +277,14 @@ export class TerminalSession {
       let found = false;
       for (let y = buf.viewportY + this.term.rows - 1; y >= buf.viewportY && !found; y--) found = hasJumpHint(buf.getLine(y));
       this.topBtn.toggle(found);
+      if (this.st.agent === "claude" && Date.now() - this.credits > 6 * 3600000) {
+        const rows = [];
+        for (let y = buf.viewportY; y < buf.viewportY + this.term.rows; y++) rows.push(buf.getLine(y)?.translateToString(true) || "");
+        if (creditsShown(rows)) {
+          this.credits = Date.now();
+          this.plugin.onCredits(this);
+        }
+      }
     }, 150);
   }
 
@@ -331,7 +365,7 @@ export class TerminalSession {
     if (ev.key === "Enter" && ev.shiftKey && plain) return send("\x1b\r"); // new line in Claude/agy
     if (ev.metaKey && !ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
       if (ev.key === "c" && this.term.hasSelection()) {
-        navigator.clipboard.writeText(this.term.getSelection());
+        copyToClipboard(this.term.getSelection());
         this.term.clearSelection();
         ev.preventDefault();
         return false;
@@ -390,6 +424,7 @@ export class TerminalSession {
       return;
     }
     if (cmd.stateUpdate) this.st = { ...this.st, ...cmd.stateUpdate };
+    if (this.st.agent === "agy" && !this.st.sessionId) this.agyPrompt = this.st.initialPrompt || "";
     this.st.initialPrompt = undefined; // send only once
     this.st.notePath = undefined;
     this.doFit();
@@ -407,7 +442,11 @@ export class TerminalSession {
     this.term.write(`\x1b[2m▶ ${pretty}\x1b[0m\r\n`);
     const argv = ["-I", "-B", "-c", PTY_HELPER, String(rows), String(cols), shell, "-l", "-c", 'exec "$@"', "sidecar-agent", cmd.bin, ...cmd.args];
     const env = this.plugin.agentEnv();
-    if (this.st.agent === "claude") env.SIDECAR_AGENT_SESSION_FILE = this.watchSessionFile();
+    if (this.st.agent === "claude") {
+      env.SIDECAR_AGENT_SESSION_FILE = this.watchSessionFile();
+      env.SIDECAR_AGENT_STATE_FILE = this.watchStateFile();
+    }
+    const agyLastBefore = this.st.agent === "agy" && !this.st.sessionId ? agyLastConversation(this.plugin.vaultPath) : "";
     const proc = spawn(py, argv, { cwd: this.plugin.vaultPath, env: buildEnv(env), stdio: ["pipe", "pipe", "pipe", "pipe"] });
     this.proc = proc;
     this.startedAt = Date.now();
@@ -426,11 +465,12 @@ export class TerminalSession {
       this.proc = null;
       this.started = false;
       this.exited = true;
+      this.setAgentState(null, "", { quiet: true });
       this.term?.write(`\r\n\x1b[2m[${code ? t("term.endedCode", { code }) : t("term.ended")}]\x1b[0m\r\n`);
       this.changed();
       this.plugin.store.scheduleRefresh(1500);
     });
-    if (this.st.agent === "agy" && !this.st.sessionId) this.plugin.detectAgyConversation(this);
+    if (this.st.agent === "agy" && !this.st.sessionId) this.plugin.detectAgyConversation(this, agyLastBefore);
     this.changed();
     this.plugin.saveLayoutSoon();
   }
@@ -465,6 +505,21 @@ export class TerminalSession {
   /** Interrupt like the Esc key (Claude/agy cancel the running answer). */
   interrupt() {
     this.input("\x1b");
+    // An interrupted turn ends without a Stop hook
+    if (this.agentState === "busy" || this.agentState === "waiting") this.setAgentState("idle", "", { quiet: true });
+  }
+
+  /** New state from the hook file or the Antigravity transcript; tells the plugin (notifications, reload). */
+  setAgentState(state, msg = "", { quiet = false } = {}) {
+    const prev = this.agentState;
+    if (prev === state) return;
+    this.agentState = state;
+    this.stateAt = Date.now();
+    this.stateMsg = msg || "";
+    this.idleChecks = 0;
+    if (state === "busy" || !state) this.unseen = false;
+    if (quiet) this.changed();
+    else this.plugin.onAgentState(this, prev, state, msg);
   }
 
   kill() {
@@ -515,6 +570,47 @@ export class TerminalSession {
     return file;
   }
 
+  /** Per-terminal file the state hook writes "busy / waiting / done" to (see state_hook.py). */
+  watchStateFile() {
+    const file = path.join(CACHE_DIR, `state-${process.pid}-${this.uid}.json`);
+    if (this.stateFile === file) return file;
+    this.unwatchStateFile();
+    try {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+      fs.rmSync(file, { force: true });
+    } catch {
+      // not critical: without the file there are no state dots
+    }
+    this.stateFile = file;
+    fs.watchFile(file, { interval: 700 }, () => {
+      try {
+        const rec = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (!rec.at || rec.at <= (this.stateReadAt || 0)) return;
+        this.stateReadAt = rec.at;
+        if (rec.state && this.running) this.setAgentState(rec.state, rec.message);
+      } catch {
+        // file missing or half written: next change
+      }
+    });
+    return file;
+  }
+
+  unwatchStateFile() {
+    if (!this.stateFile) return;
+    fs.unwatchFile(this.stateFile);
+    try {
+      fs.rmSync(this.stateFile, { force: true });
+    } catch {
+      // already gone
+    }
+    this.stateFile = null;
+  }
+
+  unwatchFiles() {
+    this.unwatchSessionFile();
+    this.unwatchStateFile();
+  }
+
   unwatchSessionFile() {
     if (!this.sessionFile) return;
     fs.unwatchFile(this.sessionFile);
@@ -528,7 +624,7 @@ export class TerminalSession {
 
   dispose() {
     this.kill();
-    this.unwatchSessionFile();
+    this.unwatchFiles();
     window.clearTimeout(this.jumpTimer);
     this.resizeObs?.disconnect();
     this.term?.dispose();
@@ -541,6 +637,7 @@ export class TerminalSession {
     if (!id || this.st.sessionId === id) return;
     this.st.sessionId = id;
     this.st.mode = "resume";
+    if (this.st.agent === "agy") this.plugin.rememberAgyConversation(id);
     if (this.st.name) this.plugin.setAlias(`${this.st.agent}:${id}`, this.st.name);
     this.plugin.saveLayoutSoon();
     this.changed();

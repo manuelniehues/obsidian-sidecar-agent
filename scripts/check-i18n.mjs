@@ -16,7 +16,8 @@ for (const f of fs.readdirSync(path.join(root, "src")).filter((f) => f.endsWith(
   for (const m of code.matchAll(/\bt\(\s*"([\w.]+)"/g)) used.add(m[1]);
   for (const m of code.matchAll(/\?\s*"([a-z]+\.[\w.]+)"\s*:\s*"([a-z]+\.[\w.]+)"/g)) used.add(m[1]).add(m[2]);
 }
-for (const id of ["all", "open", "claude", "agy"]) used.add(`filter.${id}`);
+for (const id of ["all", "open", "note", "claude", "agy"]) used.add(`filter.${id}`);
+for (const id of ["busy", "waiting"]) used.add(`agentState.${id}`);
 const problems = [];
 for (const k of used) if (!en.has(k)) problems.push(`missing in EN: ${k}`);
 for (const k of en) if (!de.has(k)) problems.push(`missing in DE: ${k}`);
