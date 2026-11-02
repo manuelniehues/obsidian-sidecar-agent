@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.2
+
+- "Reload when idle" re-reads `manifest.json`, so Obsidian shows the new version number after the reload.
 ## 1.5.1
 
 - While an agent works, its icon in the session tab and in the info line pulses (Claude's star, Antigravity's orbit) instead of a separate pulsing dot. The dots for "waiting for you" and "finished while you were away" stay.

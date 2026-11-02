@@ -836,6 +836,8 @@ export default class SidecarAgentPlugin extends Plugin {
     window.setTimeout(async () => {
       try {
         await plugins.disablePlugin(id);
+        // Re-read manifest.json too, otherwise Obsidian keeps showing the old version number
+        await plugins.loadManifests?.();
         await plugins.enablePlugin(id);
       } catch (e) {
         console.error("[sidecar-agent] reload", e);
