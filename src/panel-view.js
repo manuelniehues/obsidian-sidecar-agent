@@ -4,6 +4,7 @@ import { TerminalSession } from "./session";
 import { SessionReader } from "./reader";
 import { AGENTS, PLUGIN_NAME, dayBucket, hhmm, relTime } from "./util";
 import { t, locale } from "./i18n";
+import { usagePace } from "./schedule";
 
 export const VIEW_PANEL = "sidecar-agent-panel";
 
@@ -406,6 +407,22 @@ export class AgentPanelView extends ItemView {
     parent.createSpan({ cls: `sa-state ${cls}`, attr: { "aria-label": this.stateLabel(s) } });
   }
 
+  /** Tooltip of the schedule badge: one line per pending run. */
+  scheduleTip(list) {
+    const when = (ms) => {
+      const d = new Date(ms);
+      const today = new Date().toDateString() === d.toDateString();
+      return d.toLocaleString(locale(), today ? { hour: "2-digit", minute: "2-digit" } : { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+    };
+    const short = (x) => (x.length > 70 ? `${x.slice(0, 69)}…` : x);
+    const lines = list.map((x) =>
+      x.kind === "wakeup"
+        ? t("sched.wakeup", { when: when(x.at), text: short(x.text || "–") })
+        : t(x.recurring ? "sched.recurring" : "sched.once", { when: when(x.at), cron: x.cron, text: short(x.text || "–") }),
+    );
+    return [t("sched.title"), ...lines].join("\n");
+  }
+
   renderTabs() {
     const el = this.tabsEl;
     el.empty();
@@ -432,6 +449,12 @@ export class AgentPanelView extends ItemView {
       if (this.isBusy(s)) tabIcon.setAttr("aria-label", this.stateLabel(s));
       tab.createSpan({ cls: "sa-tab-title", text: s.title() });
       this.stateDot(tab, s);
+      const sched = s.st.agent === "claude" ? this.plugin.schedulesFor(s) : [];
+      if (sched.length) {
+        const b = tab.createSpan({ cls: "sa-sched" });
+        setIcon(b, "alarm-clock");
+        b.setAttr("aria-label", this.scheduleTip(sched));
+      }
       tab.setAttr("aria-label", `${s.title()} · ${this.stateLabel(s)}`);
       const x = tab.createSpan({ cls: "sa-tab-close" });
       setIcon(x, "x");
@@ -567,20 +590,27 @@ export class AgentPanelView extends ItemView {
         main = gm ? { ...groups[gm], label: gm } : null;
       }
     }
-    if (main?.fiveHour) bars.push({ short: t("limits.fiveShort"), win: t("limits.fiveLong"), b: main.fiveHour, group: main.label });
-    if (main?.week) bars.push({ short: t("limits.week"), win: t("limits.week"), b: main.week, group: main.label });
-    if (argon) bars.push({ short: t("limits.argonShort"), win: t("limits.week"), b: argon.week, group: argon.label });
+    if (main?.fiveHour) bars.push({ short: t("limits.fiveShort"), win: t("limits.fiveLong"), b: main.fiveHour, group: main.label, ms: 5 * 3600000 });
+    if (main?.week) bars.push({ short: t("limits.week"), win: t("limits.week"), b: main.week, group: main.label, ms: 7 * 86400000 });
+    if (argon) bars.push({ short: t("limits.argonShort"), win: t("limits.week"), b: argon.week, group: argon.label, ms: 7 * 86400000 });
     const when = (b) => (b?.resetsAt ? new Date(b.resetsAt).toLocaleString(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "?");
     for (const x of bars) {
       if (x.b.used == null) continue;
       const pct = Math.max(0, Math.min(100, Math.round(x.b.used)));
       const lvl = pct >= 90 ? " is-crit" : pct >= 70 ? " is-warn" : "";
-      const chip = el.createSpan({ cls: `sa-context sa-limit-bar${lvl}${/gemini/i.test(x.group) ? " is-gemini" : ""}` });
+      const pace = usagePace(x.b.used, x.b.resetsAt, x.ms);
+      const fast = pace?.hitAt != null;
+      const chip = el.createSpan({ cls: `sa-context sa-limit-bar${lvl}${/gemini/i.test(x.group) ? " is-gemini" : ""}${fast && !lvl ? " is-fast" : ""}` });
       chip.createSpan({ cls: "sa-limit-label", text: x.short });
       const bar = chip.createSpan({ cls: "sa-context-bar" });
       bar.createSpan({ cls: "sa-context-fill" }).style.width = `${pct}%`;
+      // Even pace: where the use would be now if it were spread evenly over the window
+      if (pace && pace.frac > 0 && pace.frac < 1) bar.createSpan({ cls: "sa-limit-tick" }).style.left = `${Math.round(pace.frac * 100)}%`;
       chip.createSpan({ cls: "sa-context-pct", text: `${pct} %` });
-      chip.setAttr("aria-label", t("limits.barTip", { group: x.group, win: x.win, pct, at: when(x.b) }));
+      let tip = t("limits.barTip", { group: x.group, win: x.win, pct, at: when(x.b) });
+      if (pace?.projected != null) tip += `\n${t("limits.paceUnder", { p: pace.projected })}`;
+      else if (fast) tip += `\n${t("limits.paceOver", { at: when({ resetsAt: pace.hitAt }) })}`;
+      chip.setAttr("aria-label", tip);
     }
   }
 

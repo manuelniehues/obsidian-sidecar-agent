@@ -496,6 +496,26 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-limit-bar.is-gemini:not(.is-warn):not(.is-crit) {
   --sa-ctx-color: color-mix(in srgb, var(--color-blue) 45%, var(--background-modifier-border));
 }
+/* Even-pace mark on a limit bar; a bar running ahead of a pace that reaches the limit before the reset */
+.sidecar-agent-panel .sa-limit-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text-faint);
+}
+.sidecar-agent-panel .sa-limit-bar.is-fast:not(.is-warn):not(.is-crit) {
+  --sa-ctx-color: color-mix(in srgb, var(--color-orange) 40%, var(--background-modifier-border));
+}
+/* Scheduled runs (/loop, cron, wakeup) on a session tab */
+.sidecar-agent-panel .sa-sched {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-sched svg {
+  width: 11px;
+  height: 11px;
+}
 .sidecar-agent-panel .sa-limit-label {
   color: var(--text-faint);
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.0
+
+- Vault paths and `[[wikilinks]]` in the terminal are links. A click opens a note (or a PDF, image, canvas …) in a new tab, or focuses the tab that already shows it; other files and folders are shown in Finder, nothing is ever run. Paths may contain spaces and a trailing `:12`; only targets that exist are underlined. Option-click shows a note in Finder instead.
+- Scheduled runs of a Claude session (`/loop`, cron jobs, wakeups) show as an alarm clock on its tab; the tooltip lists each run with its time, schedule and prompt. Read from the session file, so it covers runs Claude scheduled by itself too. Jobs end with the Claude process, a restarted session starts without them.
+- Pace on the limit bars: a thin mark shows where the use would be with an even pace over the window, and the tooltip adds the expected use at the reset or, if the limit comes first, roughly when it is reached. A bar heading for the limit before its reset turns a muted orange.
 ## 1.8.1
 
 - The limit bars of the Gemini quotas (Antigravity: Gemini group and Argon) are a subtle blue instead of the accent color. Orange and red from 70 and 90 % stay.

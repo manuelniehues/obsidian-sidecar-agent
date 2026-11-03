@@ -1,11 +1,13 @@
 // Sidecar Agent – real terminal sessions for Claude Code and Antigravity in the right sidebar
 // (top: sessions and search, middle: terminal, bottom: info and actions), with renaming,
 // per-session model and effort, parallel sessions, a reading view and usage limits.
-import { Events, FileSystemAdapter, MarkdownView, Menu, Notice, Plugin } from "obsidian";
+import { Events, FileSystemAdapter, MarkdownView, Menu, Notice, Plugin, TFile } from "obsidian";
+import { shell } from "electron";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { SessionStore } from "./store";
+import { ingestSchedule, newScheduleState, pendingSchedules } from "./schedule";
 import STATUSLINE_PY from "./py/statusline.py";
 import CONTEXT_HOOK_PY from "./py/context_hook.py";
 import SESSION_HOOK_PY from "./py/session_hook.py";
@@ -680,6 +682,7 @@ export default class SidecarAgentPlugin extends Plugin {
   tickLimits() {
     this.readClaudeLimits();
     if ([...this.terminals].some((s) => s.st.agent === "agy")) this.refreshAgyLimits();
+    for (const s of this.terminals) if (s.st.agent === "claude" && s.running) this.scanSchedules(s);
     if (this.settings.autoResume) for (const s of this.terminals) if (s.st.agent === "claude" && s.running) this.checkUsageLimit(s);
     this.verifyBusy();
     this.trigger("terminals-changed");
@@ -995,6 +998,103 @@ export default class SidecarAgentPlugin extends Plugin {
     if (await this.claudeBusy(s.st.sessionId)) return; // already working again
     s.submit(this.settings.autoResumeMessage || t("prompt.autoResume"));
     new Notice(t("notice.autoResumed", { title: s.title() }));
+  }
+
+  // ---------------------------------------------------------------- scheduled runs (Claude /loop, cron, wakeup)
+  /**
+   * Reads new lines of a running Claude session's file for CronCreate/CronDelete/ScheduleWakeup.
+   * Jobs live in the Claude process: a new process (restart, resume) starts with an empty state.
+   */
+  scanSchedules(s) {
+    if (!s.st.sessionId || !s.startedAt) return;
+    let sc = s.schedScan;
+    if (!sc || sc.startedAt !== s.startedAt) sc = s.schedScan = { startedAt: s.startedAt, file: "", offset: 0, rest: "", state: newScheduleState() };
+    const file = path.join(this.store.paths.claudeDir, `${s.st.sessionId}.jsonl`);
+    try {
+      const size = fs.statSync(file).size;
+      if (sc.file !== file || size < sc.offset) {
+        // New file (first scan or /clear): look at the recent part only, calls before the start are ignored anyway
+        sc.file = file;
+        sc.offset = Math.max(0, size - 2000000);
+        sc.rest = "";
+        sc.skipFirst = sc.offset > 0;
+      }
+      if (size === sc.offset) return;
+      const fd = fs.openSync(file, "r");
+      const buf = Buffer.alloc(size - sc.offset);
+      fs.readSync(fd, buf, 0, buf.length, sc.offset);
+      fs.closeSync(fd);
+      sc.offset = size;
+      const lines = (sc.rest + buf.toString("utf8")).split("\n");
+      sc.rest = lines.pop() || "";
+      if (sc.skipFirst) {
+        lines.shift();
+        sc.skipFirst = false;
+      }
+      for (const l of lines) ingestSchedule(sc.state, l, s.startedAt - 5000);
+    } catch {
+      // no session file yet
+    }
+  }
+
+  /** Pending scheduled runs of a session, soonest first (empty when none or not running). */
+  schedulesFor(s) {
+    if (!s.running || !s.schedScan) return [];
+    return pendingSchedules(s.schedScan.state);
+  }
+
+  // ---------------------------------------------------------------- links in the terminal
+  /** A [[wikilink]] target that exists in the vault, or null. */
+  resolveWikilink(link) {
+    const file = this.app.metadataCache.getFirstLinkpathDest(link.split("#")[0].trim(), "");
+    return file ? { wikilink: link, file } : null;
+  }
+
+  /** Absolute path of an existing file or folder named in the terminal (absolute, ~/…, or relative to the vault), or null. */
+  resolveTermPath(raw) {
+    let p = String(raw || "").trim();
+    if (p.length < 3 || p.includes("://")) return null;
+    if (p.startsWith("@")) p = p.slice(1);
+    if (p.startsWith("~/")) p = path.join(os.homedir(), p.slice(2));
+    const abs = path.isAbsolute(p) ? p : path.join(this.vaultPath, p);
+    if (!path.isAbsolute(p) && !p.includes("/")) {
+      // a bare file name only counts when it is a vault file at the root
+      if (!fs.existsSync(abs)) return null;
+    }
+    try {
+      fs.statSync(abs);
+      return abs;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Opens a terminal link: a note or other file Obsidian can show opens in a tab (an open tab is focused),
+   * everything else is shown in Finder. Nothing is ever executed.
+   */
+  async openTermLink(target, ev) {
+    let file = target.file || null;
+    if (!file && target.abs) {
+      const base = this.vaultPath + path.sep;
+      if (target.abs.startsWith(base)) {
+        const f = this.app.vault.getAbstractFileByPath(target.abs.slice(base.length).split(path.sep).join("/"));
+        if (f instanceof TFile) file = f;
+      }
+    }
+    const viewable = /\.(md|canvas|base|pdf|png|jpe?g|gif|webp|svg|bmp|avif|mp3|m4a|wav|ogg|flac|mp4|webm|mov|m4v)$/i;
+    if (file && viewable.test(file.path) && !ev?.altKey) {
+      const heading = target.wikilink?.includes("#") ? target.wikilink : "";
+      if (heading) return this.app.workspace.openLinkText(heading, "", "tab");
+      let leaf = null;
+      this.app.workspace.iterateAllLeaves((l) => {
+        if (!leaf && l.view?.file?.path === file.path) leaf = l;
+      });
+      if (leaf) return this.app.workspace.setActiveLeaf(leaf, { focus: true });
+      return this.app.workspace.getLeaf("tab").openFile(file);
+    }
+    const abs = target.abs || (file ? path.join(this.vaultPath, file.path) : null);
+    if (abs) shell.showItemInFolder(abs);
   }
 
   // ---------------------------------------------------------------- focus lock (voice input)

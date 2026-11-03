@@ -17,8 +17,10 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 
 - **Model and effort per session.** The chips below the terminal switch the model or effort of this session only, without changing your global Claude default. The session restarts with its history kept.
 - **Note context.** Optionally, every Claude message silently carries the path of the note you are looking at (and a selection in it), so you can just ask "summarize this". Toggle it with one click.
-- **Usage limits** as small bars below the terminal, like the context chip: 5-hour and weekly window of your Claude plan, or of the Antigravity model group the session uses, plus Antigravity's separate Gemini 4 Argon weekly quota. Orange from 70 %, red from 90 %, hover for the reset time.
+- **Usage limits** as small bars below the terminal, like the context chip: 5-hour and weekly window of your Claude plan, or of the Antigravity model group the session uses, plus Antigravity's separate Gemini 4 Argon weekly quota. Orange from 70 %, red from 90 %, hover for the reset time. A thin mark shows the even pace, the tooltip the expected use at the reset or when the limit would be reached.
 - **Context window fill level** of the active Claude session as a small bar in the info line, updated after every answer. Click it to compact now or with a focus; from 85 % a **compact** button appears. For Antigravity the token count in the context (agy reports no window size); clicking it compacts as well.
+- **Clickable vault paths and `[[wikilinks]]`** in the terminal: notes open in a tab, other files show in Finder.
+- **Scheduled runs** (`/loop`, cron, wakeups) of a Claude session as an alarm clock on its tab, with the next runs in the tooltip.
 - **Usage credits warning**: when Claude switches to paid usage credits after a limit, a red chip in the info line and a notice tell you.
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
