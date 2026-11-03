@@ -518,18 +518,7 @@ export class AgentPanelView extends ItemView {
     }
     if (s.st.agent === "claude") this.renderContext(el, s);
     else if (s.st.agent === "agy") this.renderAgyContext(el, s);
-    const lim = this.plugin.limitsFor(s);
-    if (lim && (lim.fiveHour || lim.week)) {
-      const fmt = (b) => (b && b.used != null ? `${Math.round(b.used)} %` : "–");
-      const worst = Math.max(lim.fiveHour?.used ?? 0, lim.week?.used ?? 0);
-      const parts = [];
-      if (lim.fiveHour) parts.push(`5h ${fmt(lim.fiveHour)}`);
-      if (lim.week) parts.push(`${t("limits.week")} ${fmt(lim.week)}`);
-      const prefix = s.st.agent === "agy" ? `${lim.label.replace(/ models?$/i, "")}: ` : "";
-      const chipL = el.createSpan({ cls: `sa-limit${worst >= 90 ? " is-crit" : worst >= 70 ? " is-warn" : ""}`, text: prefix + parts.join(" · ") });
-      const when = (b) => (b?.resetsAt ? new Date(b.resetsAt).toLocaleString(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "?");
-      chipL.setAttr("aria-label", t("limits.tip", { label: lim.label, five: fmt(lim.fiveHour), fiveAt: when(lim.fiveHour), week: fmt(lim.week), weekAt: when(lim.week) }));
-    }
+    this.renderLimits(el, s);
     const lockOn = !!this.plugin.settings.focusLock;
     const lock = el.createEl("button", { cls: `sa-lock clickable-icon${lockOn ? " is-on" : ""}`, attr: { "aria-label": lockOn ? t("lock.on") : t("lock.off") } });
     setIcon(lock, lockOn ? "lock" : "lock-open");
@@ -557,6 +546,42 @@ export class AgentPanelView extends ItemView {
       ev.stopPropagation();
       this.plugin.toggleNoteContext();
     };
+  }
+
+  /**
+   * Usage limits as small bars like the context chip: 5 h and week of the plan (Claude) or of the
+   * session's model group (Antigravity), for Antigravity also the separate Gemini 4 Argon weekly quota.
+   */
+  renderLimits(el, s) {
+    const lim = this.plugin.limitsFor(s);
+    const bars = [];
+    let main = lim;
+    let argon = null;
+    if (s.st.agent === "agy") {
+      const groups = this.plugin.limits.agy?.groups || {};
+      const an = Object.keys(groups).find((k) => /argon/i.test(k));
+      if (an && groups[an].week) argon = { ...groups[an], label: an };
+      // An Argon session: its group has only the weekly quota, 5 h and week come from the general Gemini group
+      if (main && an && main.label === an) {
+        const gm = Object.keys(groups).find((k) => /^gemini models$/i.test(k));
+        main = gm ? { ...groups[gm], label: gm } : null;
+      }
+    }
+    if (main?.fiveHour) bars.push({ short: t("limits.fiveShort"), win: t("limits.fiveLong"), b: main.fiveHour, group: main.label });
+    if (main?.week) bars.push({ short: t("limits.week"), win: t("limits.week"), b: main.week, group: main.label });
+    if (argon) bars.push({ short: t("limits.argonShort"), win: t("limits.week"), b: argon.week, group: argon.label });
+    const when = (b) => (b?.resetsAt ? new Date(b.resetsAt).toLocaleString(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "?");
+    for (const x of bars) {
+      if (x.b.used == null) continue;
+      const pct = Math.max(0, Math.min(100, Math.round(x.b.used)));
+      const lvl = pct >= 90 ? " is-crit" : pct >= 70 ? " is-warn" : "";
+      const chip = el.createSpan({ cls: `sa-context sa-limit-bar${lvl}` });
+      chip.createSpan({ cls: "sa-limit-label", text: x.short });
+      const bar = chip.createSpan({ cls: "sa-context-bar" });
+      bar.createSpan({ cls: "sa-context-fill" }).style.width = `${pct}%`;
+      chip.createSpan({ cls: "sa-context-pct", text: `${pct} %` });
+      chip.setAttr("aria-label", t("limits.barTip", { group: x.group, win: x.win, pct, at: when(x.b) }));
+    }
   }
 
   /** Context window fill level as a small bar (Claude only; Antigravity reports no context usage). */

@@ -492,6 +492,9 @@ body.sa-resizing.sa-resizing * {
   width: 12px;
   height: 12px;
 }
+.sidecar-agent-panel .sa-limit-label {
+  color: var(--text-faint);
+}
 .sidecar-agent-panel .sa-context-bar {
   position: relative;
   width: 36px;

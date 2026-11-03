@@ -184,7 +184,10 @@ const EN = {
   "context.tipAgy": "Context: {used} tokens after the last answer. Antigravity does not report the size of the context window, so no percentage. Click to compact.",
   "context.tip": "Context window: {pct} % used ({used} of {size} tokens). Claude Code compacts automatically when it gets full, /compact does it now.",
   "limits.claudePlan": "Claude plan",
-  "limits.tip": "{label}: used 5 h {five} (reset {fiveAt}), week {week} (reset {weekAt})",
+  "limits.fiveShort": "5h",
+  "limits.fiveLong": "5 hours",
+  "limits.argonShort": "Argon",
+  "limits.barTip": "{group} · {win}: {pct} % used, reset {at}",
 
   "ctx.on": "Context: {path} is sent with every message to Claude. Click to turn off.",
   "ctx.onSel": "Context: {path} plus the selection is sent with every message to Claude. Click to turn off.",
@@ -456,7 +459,10 @@ const DE = {
   "context.tipAgy": "Kontext: {used} Tokens nach der letzten Antwort. Antigravity nennt die Größe des Kontextfensters nicht, deshalb ohne Prozentwert. Klicken zum Verdichten.",
   "context.tip": "Kontextfenster: {pct} % belegt ({used} von {size} Tokens). Claude Code verdichtet automatisch, wenn es voll wird, /compact sofort.",
   "limits.claudePlan": "Claude-Abo",
-  "limits.tip": "{label}: verbraucht 5 h {five} (Reset {fiveAt}), Woche {week} (Reset {weekAt})",
+  "limits.fiveShort": "5h",
+  "limits.fiveLong": "5 Stunden",
+  "limits.argonShort": "Argon",
+  "limits.barTip": "{group} · {win}: {pct} % verbraucht, Reset {at}",
 
   "ctx.on": "Kontext: {path} geht mit jeder Nachricht an Claude. Klicken zum Abschalten.",
   "ctx.onSel": "Kontext: {path} samt Markierung geht mit jeder Nachricht an Claude. Klicken zum Abschalten.",

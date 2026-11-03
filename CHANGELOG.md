@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.0
+
+- Usage limits as bars in the info line, in the same style as the context chip: "5h" and "week" for Claude and for the Antigravity model group of the session, for Antigravity also "Argon" (the separate Gemini 4 Argon weekly quota). Orange from 70 %, red from 90 %, the tooltip shows group, percentage and reset time. In an Argon session, 5h and week come from the general Gemini group.
 ## 1.7.2
 
 - Consistent text color in the bottom rows: model and effort switches and the Note, Selection and Stop buttons now use the same muted color as the rest of the info line, full color on hover.
