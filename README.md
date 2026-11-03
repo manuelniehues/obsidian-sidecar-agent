@@ -23,6 +23,7 @@ Sidecar Agent does not reimplement the agents. It starts the official command-li
 - **Resume after the usage limit.** When a Claude session hits the limit, Sidecar Agent sends a short message after the reset so the task continues. Claude Code does not do this by itself in sessions with Remote Control.
 - **Send notes and selections** to a session from the editor, the file explorer, by drag and drop or with commands.
 - **Reload when idle**: the command "Reload plugin when no session is working" waits until no answer is running, then reloads the plugin. A reload ends the panel terminals (they resume afterwards), so this keeps it from cutting off an answer. An agent working in a panel session can run it itself.
+- **Progress row** under the tabs while an agent works: bar, "3/7" and the current step from Claude's task list, plus the elapsed time. Claude Code's task list tools are switched off by default in current versions; plugin sessions turn them back on (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, setting "Task list for the progress row").
 - **What's new**: after an update, the changes of the new version appear once (from the bundled changelog, no network access). Can be turned off; the command "What's new in this version" shows it again.
 - **Copy from Claude's fullscreen view**: Claude Code copies its own mouse selection via OSC 52, which the terminal passes to the clipboard.
 - **Focus lock** (optional) keeps the keyboard focus in the terminal, handy for dictation tools that type into the focused window.
@@ -74,7 +75,7 @@ Like the agents themselves, the plugin works with files outside your vault:
 | `~/Library/Caches/sidecar-agent/` | write | Session index (including the vault files each session touched), Claude usage limits, context fill level per Claude session, the current note context (one file per vault), the current session id and state per panel terminal. |
 | `~/Library/Application Support/sidecar-agent/` | write | Small Python scripts that Claude runs in plugin sessions: the status line (reads your usage limits and the context fill level), the note-context hook, and hooks that report the session id and the state (working, waiting, done). |
 
-Your global `~/.claude/settings.json` is never changed. Plugin sessions get their status line, hook, color scheme and `autoContinueAtUsageLimit` through `--settings`, which applies to that process only.
+Your global `~/.claude/settings.json` is never changed. Plugin sessions also get the environment variable `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` (task list tools, can be switched off). Plugin sessions get their status line, hook, color scheme and `autoContinueAtUsageLimit` through `--settings`, which applies to that process only.
 
 The note context sends only the **path** of the open note and a selection you made. The agent reads the note itself, like any other file in the vault it has access to.
 

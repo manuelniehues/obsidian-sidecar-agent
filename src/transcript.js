@@ -209,3 +209,96 @@ export function osc52Text(data) {
     return null;
   }
 }
+
+// ------------------------------------------------------------------ task list (progress)
+
+/**
+ * Follows Claude Code's task list in a session file (TaskCreate / TaskUpdate, older TodoWrite).
+ * feed(line) per line, in order; progress() gives the current batch: the tasks created since the last
+ * moment all earlier ones were finished, so an old, completed list does not count for a new job.
+ */
+export class TaskTracker {
+  constructor() {
+    this.tasks = new Map(); // id -> {id, subject, active, status}
+    this.batch = []; // ids of the current batch, in creation order
+    this.pending = new Map(); // tool_use id -> TaskCreate input, until the result names the task id
+    this.seq = 0;
+  }
+
+  /** Returns true when the task list changed. */
+  feed(line) {
+    // Cheap pre-check: only lines with task tools, or results while a TaskCreate waits for its id
+    if (!line.includes("Task") && !line.includes("TodoWrite") && !(this.pending.size && line.includes("tool_result"))) return false;
+    let d;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    // Only the conversation itself: Claude Code repeats earlier messages in internal records (api-request-blob)
+    if (d.isSidechain || (d.type !== "assistant" && d.type !== "user")) return false;
+    const c = d.message?.content;
+    if (!Array.isArray(c)) return false;
+    let changed = false;
+    for (const b of c) {
+      if (b.type === "tool_use" && b.name === "TaskCreate") this.pending.set(b.id, b.input || {});
+      else if (b.type === "tool_use" && b.name === "TaskUpdate") changed = this.update(b.input || {}) || changed;
+      else if (b.type === "tool_use" && b.name === "TodoWrite") changed = this.todoWrite(b.input?.todos) || changed;
+      else if (b.type === "tool_result" && this.pending.has(b.tool_use_id)) {
+        const input = this.pending.get(b.tool_use_id);
+        this.pending.delete(b.tool_use_id);
+        const text = typeof b.content === "string" ? b.content : JSON.stringify(b.content || "");
+        const m = text.match(/Task #(\w+) created/) || [null, d.toolUseResult?.task?.id];
+        if (m[1]) changed = this.create(String(m[1]), input) || changed;
+      }
+    }
+    return changed;
+  }
+
+  create(id, input) {
+    if (this.batch.length && this.batch.every((x) => this.done(this.tasks.get(x)))) this.batch = [];
+    this.tasks.set(id, { id, subject: input.subject || "", active: input.activeForm || "", status: "pending" });
+    this.batch.push(id);
+    return true;
+  }
+
+  update(input) {
+    const t = this.tasks.get(String(input.taskId));
+    if (!t) return false;
+    if (input.status) t.status = input.status;
+    if (input.subject) t.subject = input.subject;
+    if (input.activeForm) t.active = input.activeForm;
+    if (t.status === "deleted") this.batch = this.batch.filter((x) => x !== t.id);
+    return true;
+  }
+
+  /** Older Claude Code versions: TodoWrite always sends the complete list. */
+  todoWrite(todos) {
+    if (!Array.isArray(todos)) return false;
+    this.batch = [];
+    this.tasks.clear();
+    todos.forEach((td, i) => {
+      const id = `todo-${i}`;
+      this.tasks.set(id, { id, subject: td.content || "", active: td.activeForm || "", status: td.status || "pending" });
+      this.batch.push(id);
+    });
+    return true;
+  }
+
+  done(t) {
+    return !t || t.status === "completed" || t.status === "deleted";
+  }
+
+  /** {total, done, current, tasks:[{subject, status}]} or null without a list of at least two steps. */
+  progress() {
+    const tasks = this.batch.map((id) => this.tasks.get(id)).filter(Boolean);
+    if (tasks.length < 2) return null;
+    const cur = tasks.find((t) => t.status === "in_progress");
+    return {
+      total: tasks.length,
+      done: tasks.filter((t) => t.status === "completed").length,
+      current: cur ? cur.active || cur.subject : "",
+      tasks: tasks.map((t) => ({ subject: t.subject, status: t.status })),
+    };
+  }
+}

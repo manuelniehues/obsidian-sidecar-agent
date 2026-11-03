@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0
+
+- Progress row under the session tabs while an agent works: a bar with "3/7" and the current step from Claude's task list (hover shows all steps: ✓ done, ▶ running, ○ open), plus the time since the job started. Without a task list, or for Antigravity, only the time.
+- Current Claude Code versions switch the task list tools off by default. Plugin sessions now get them back (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, plugin sessions only), so Claude plans larger jobs in steps. Setting "Task list for the progress row", on by default.
 ## 1.6.0
 
 - "What's new" after an update: the changes of the new version (all versions since the last one you saw, if you skipped some) appear once in a dialog, with a link to the GitHub release. Taken from the changelog bundled with the plugin, no network access. Can be turned off in the dialog or in the settings; the command "What's new in this version" shows it again. Nothing is shown after a fresh install.

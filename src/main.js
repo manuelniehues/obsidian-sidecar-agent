@@ -15,7 +15,7 @@ import { isDarkTheme, obsidianAccent } from "./session";
 import { ConfirmModal, EFFORTS, NewSessionModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
-import { parseResetText, toMs, findUsageLimit, agyTail } from "./transcript";
+import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
@@ -139,6 +139,8 @@ export default class SidecarAgentPlugin extends Plugin {
     this.registerInterval(window.setInterval(() => this.tickLimits(), 30000));
     this.watchContext();
     this.agyCtx = new Map(); // conversation id → {mtime, rec}
+    this.taskTrack = new WeakMap(); // terminal → {file, offset, rest, tracker}
+    this.registerInterval(window.setInterval(() => this.pollTasks(), 2000));
     this.registerInterval(window.setInterval(() => this.pollAgyContext(), 5000));
     this.setupFocusLock();
     this.registerDomEvent(window, "focus", () => this.markSeen(this.panel?.active));
@@ -505,6 +507,57 @@ export default class SidecarAgentPlugin extends Plugin {
     }
     this.agyCtx.set(id, { mtime: st.mtimeMs, rec });
     return rec;
+  }
+
+  /**
+   * Task list of a Claude session (TaskCreate/TaskUpdate in its session file), read incrementally.
+   * Returns {total, done, current, tasks} or null.
+   */
+  taskProgress(s, refresh = false) {
+    if (s.st.agent !== "claude" || !s.st.sessionId) return null;
+    const file = path.join(this.store.paths.claudeDir, `${s.st.sessionId}.jsonl`);
+    let t = this.taskTrack.get(s);
+    if (!t || t.file !== file) {
+      t = { file, offset: 0, rest: "", tracker: new TaskTracker() };
+      this.taskTrack.set(s, t);
+      refresh = true;
+    }
+    if (refresh) {
+      try {
+        const size = fs.statSync(file).size;
+        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker() });
+        if (size > t.offset) {
+          const fd = fs.openSync(file, "r");
+          const buf = Buffer.alloc(size - t.offset);
+          fs.readSync(fd, buf, 0, buf.length, t.offset);
+          fs.closeSync(fd);
+          t.offset = size;
+          const lines = (t.rest + buf.toString("utf8")).split("\n");
+          t.rest = lines.pop() || "";
+          let changed = false;
+          for (const l of lines) if (t.tracker.feed(l)) changed = true;
+          t.changed = changed;
+        }
+      } catch {
+        // no session file yet
+      }
+    }
+    return t.tracker.progress();
+  }
+
+  /** Every 2 s: follow the task lists of working Claude sessions. */
+  pollTasks() {
+    let changed = false;
+    for (const s of this.terminals) {
+      if (s.st.agent !== "claude" || !s.running) continue;
+      if (s.agentState !== "busy" && s.agentState !== "waiting" && this.taskTrack.has(s)) continue;
+      this.taskProgress(s, true);
+      if (this.taskTrack.get(s)?.changed) {
+        this.taskTrack.get(s).changed = false;
+        changed = true;
+      }
+    }
+    if (changed) this.trigger("progress-changed");
   }
 
   /** Milliseconds since the Antigravity transcript was last written (Infinity if there is none). */

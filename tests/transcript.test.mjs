@@ -96,3 +96,55 @@ test("session touches the note: exact, folder suffix, NFD paths; bare names do n
   assert.ok(!touchesFile(files, "DEKRA/index.md"));
   assert.ok(!touchesFile([], "x.md"));
 });
+
+test("task progress: TaskCreate/TaskUpdate, a new batch after a finished one, TodoWrite", async () => {
+  const { TaskTracker } = await import("../src/transcript.js");
+  const use = (name, input, id = "u" + Math.random()) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } });
+  const res = (id, text) => JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] } });
+  const tr = new TaskTracker();
+  const lines = [
+    use("TaskCreate", { subject: "Lesen", activeForm: "Lese Akte" }, "c1"),
+    res("c1", "Task #1 created successfully: Lesen"),
+    use("TaskCreate", { subject: "Schreiben", activeForm: "Schreibe Entwurf" }, "c2"),
+    res("c2", "Task #2 created successfully: Schreiben"),
+    use("TaskCreate", { subject: "Prüfen" }, "c3"),
+    res("c3", "Task #3 created successfully: Prüfen"),
+    use("TaskUpdate", { taskId: "1", status: "completed" }),
+    use("TaskUpdate", { taskId: "2", status: "in_progress" }),
+  ];
+  for (const l of lines) tr.feed(l);
+  let p = tr.progress();
+  assert.deepEqual([p.total, p.done, p.current], [3, 1, "Schreibe Entwurf"]);
+  for (const l of [use("TaskUpdate", { taskId: "2", status: "completed" }), use("TaskUpdate", { taskId: "3", status: "completed" })]) tr.feed(l);
+  p = tr.progress();
+  assert.deepEqual([p.total, p.done, p.current], [3, 3, ""]);
+  // internal copies of earlier messages must not create the tasks a second time
+  tr.feed(JSON.stringify({ type: "api-request-blob", message: { role: "user", content: [{ type: "tool_use", id: "c1", name: "TaskCreate", input: { subject: "Lesen" } }, { type: "tool_result", tool_use_id: "c1", content: "Task #1 created successfully: Lesen" }] } }));
+  assert.equal(tr.progress().total, 3);
+  // next job: a fresh list replaces the finished one
+  for (const l of [use("TaskCreate", { subject: "A" }, "c4"), res("c4", "Task #4 created successfully: A"), use("TaskCreate", { subject: "B" }, "c5"), res("c5", "Task #5 created successfully: B")]) tr.feed(l);
+  p = tr.progress();
+  assert.deepEqual([p.total, p.done], [2, 0]);
+  // a single step is no progress worth a bar
+  const one = new TaskTracker();
+  one.feed(use("TaskCreate", { subject: "X" }, "x"));
+  one.feed(res("x", "Task #1 created successfully: X"));
+  assert.equal(one.progress(), null);
+  // older versions
+  const old = new TaskTracker();
+  old.feed(use("TodoWrite", { todos: [{ content: "a", status: "completed" }, { content: "b", status: "in_progress", activeForm: "Mache b" }, { content: "c", status: "pending" }] }));
+  p = old.progress();
+  assert.deepEqual([p.total, p.done, p.current], [3, 1, "Mache b"]);
+});
+
+test("task progress from a real session format (toolUseResult names the id)", async () => {
+  const { TaskTracker } = await import("../src/transcript.js");
+  const tr = new TaskTracker();
+  tr.feed(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "TaskCreate", input: { subject: "S1" } }] } }));
+  tr.feed(JSON.stringify({ type: "user", toolUseResult: { task: { id: "7", subject: "S1" } }, message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "ok" }] }] } }));
+  tr.feed(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t2", name: "TaskCreate", input: { subject: "S2" } }] } }));
+  tr.feed(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t2", content: "Task #8 created successfully: S2" }] } }));
+  tr.feed(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t3", name: "TaskUpdate", input: { taskId: "7", status: "in_progress" } }] } }));
+  const p = tr.progress();
+  assert.deepEqual([p.total, p.done, p.current], [2, 0, "S1"]);
+});

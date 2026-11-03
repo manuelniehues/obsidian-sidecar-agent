@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   agyRemoteControl: false,
   agyDefaultModel: "", // "" = agy's own default, "newest-flash" = newest Flash model, otherwise a model id
   notify: "unseen", // unseen | off
+  claudeTaskTools: true, // CLAUDE_CODE_ENABLE_TODO_TOOLS for plugin sessions (task list → progress row)
   autoResume: true,
   autoResumeMessage: "",
   noteContext: true,
@@ -182,6 +183,15 @@ export class SidecarSettingTab extends PluginSettingTab {
             s.claudeTheme = v;
             save();
           }),
+      );
+    new Setting(el)
+      .setName(t("set.taskTools"))
+      .setDesc(t("set.taskToolsDesc"))
+      .addToggle((tg) =>
+        tg.setValue(s.claudeTaskTools !== false).onChange((v) => {
+          s.claudeTaskTools = v;
+          save();
+        }),
       );
     new Setting(el)
       .setName(t("set.autoResume"))

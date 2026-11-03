@@ -130,6 +130,8 @@ export class AgentPanelView extends ItemView {
 
     // ---- middle: open sessions + terminal
     this.tabsEl = root.createDiv({ cls: "sa-tabs" });
+    this.progressEl = root.createDiv({ cls: "sa-progress" });
+    this.progressEl.hide();
     this.termArea = root.createDiv({ cls: "sa-term-area" });
     this.emptyEl = this.termArea.createDiv({ cls: "sa-empty" });
     this.emptyEl.createDiv({ text: t("panel.empty") });
@@ -157,6 +159,8 @@ export class AgentPanelView extends ItemView {
     this.registerEvent(this.plugin.store.on("error", (e) => this.setStatus(`⚠️ ${t("panel.indexError", { msg: e.message })}`)));
     this.registerEvent(this.plugin.on("terminals-changed", () => this.renderAll()));
     this.registerEvent(this.plugin.on("context-changed", () => this.renderInfo()));
+    this.registerEvent(this.plugin.on("progress-changed", () => this.renderProgress()));
+    this.registerInterval(window.setInterval(() => this.tickElapsed(), 1000));
     this.registerEvent(this.app.workspace.on("css-change", () => this.sessions.forEach((s) => s.applyOptions())));
 
     this.built = true;
@@ -328,7 +332,55 @@ export class AgentPanelView extends ItemView {
     if (!this.built) return;
     this.renderList();
     this.renderTabs();
+    this.renderProgress();
     this.renderInfo();
+  }
+
+  /**
+   * Progress row under the session tabs: steps of Claude's task list (bar, "3/7", current step) and the
+   * time since the turn started. Only while the agent works, or while a task list is unfinished.
+   */
+  renderProgress() {
+    const el = this.progressEl;
+    if (!el) return;
+    el.empty();
+    this.elapsedEl = null;
+    const s = this.active;
+    const working = s?.running && (s.agentState === "busy" || s.agentState === "waiting");
+    const p = s?.running ? this.plugin.taskProgress(s) : null;
+    const open = p && p.done < p.total;
+    if (!s || (!working && !open)) {
+      el.hide();
+      return;
+    }
+    el.show();
+    el.toggleClass("sa-agy", s.st.agent === "agy");
+    setIcon(el.createSpan({ cls: "sa-progress-icon" }), p ? "list-checks" : "timer");
+    if (p) {
+      const pct = Math.round((p.done / p.total) * 100);
+      const bar = el.createSpan({ cls: "sa-progress-bar" });
+      bar.createSpan({ cls: "sa-progress-fill" }).style.width = `${pct}%`;
+      el.createSpan({ cls: "sa-progress-count", text: `${p.done}/${p.total}` });
+      if (p.current) el.createSpan({ cls: "sa-progress-step", text: p.current });
+      const mark = { completed: "✓", in_progress: "▶", pending: "○" };
+      el.setAttr("aria-label", p.tasks.map((t) => `${mark[t.status] || "○"} ${t.subject}`).join("\n"));
+    } else {
+      el.createSpan({ cls: "sa-progress-step is-muted", text: s.agentState === "waiting" ? t("agentState.waiting") : t("agentState.busy") });
+      el.setAttr("aria-label", t("progress.noList"));
+    }
+    if (working && s.turnStartedAt) this.elapsedEl = el.createSpan({ cls: "sa-progress-time" });
+    this.tickElapsed();
+  }
+
+  /** Every second: time since the turn started (only the text, no re-render). */
+  tickElapsed() {
+    const s = this.active;
+    if (!this.elapsedEl || !s?.turnStartedAt) return;
+    const sec = Math.max(0, Math.floor((Date.now() - s.turnStartedAt) / 1000));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const ss = String(sec % 60).padStart(2, "0");
+    this.elapsedEl.setText(h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`);
   }
 
   stateLabel(s) {

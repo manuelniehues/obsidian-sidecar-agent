@@ -445,6 +445,8 @@ export class TerminalSession {
     if (this.st.agent === "claude") {
       env.SIDECAR_AGENT_SESSION_FILE = this.watchSessionFile();
       env.SIDECAR_AGENT_STATE_FILE = this.watchStateFile();
+      // Claude Code switched its task list tools off by default for current models; the progress row needs them
+      if (this.plugin.settings.claudeTaskTools !== false) env.CLAUDE_CODE_ENABLE_TODO_TOOLS = "1";
     }
     const agyLastBefore = this.st.agent === "agy" && !this.st.sessionId ? agyLastConversation(this.plugin.vaultPath) : "";
     const proc = spawn(py, argv, { cwd: this.plugin.vaultPath, env: buildEnv(env), stdio: ["pipe", "pipe", "pipe", "pipe"] });
@@ -515,6 +517,8 @@ export class TerminalSession {
     if (prev === state) return;
     this.agentState = state;
     this.stateAt = Date.now();
+    // Start of a turn: time shown in the progress row while the agent works
+    if ((state === "busy" || state === "waiting") && prev !== "busy" && prev !== "waiting") this.turnStartedAt = Date.now();
     this.stateMsg = msg || "";
     this.idleChecks = 0;
     if (state === "busy" || !state) this.unseen = false;

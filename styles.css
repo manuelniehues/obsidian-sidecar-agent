@@ -783,3 +783,63 @@ body.sa-resizing.sa-resizing * {
   border-top: 1px solid var(--background-modifier-border);
   padding-top: 0.8em;
 }
+
+/* Progress row under the session tabs: task list steps and time since the turn started */
+.sidecar-agent-panel .sa-progress {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+  white-space: nowrap;
+  overflow: hidden;
+  --sa-progress-color: var(--interactive-accent);
+}
+.sidecar-agent-panel .sa-progress.sa-agy {
+  --sa-progress-color: var(--sa-agy-color);
+}
+.sidecar-agent-panel .sa-progress-icon {
+  display: inline-flex;
+  color: var(--sa-progress-color);
+}
+.sidecar-agent-panel .sa-progress-icon svg {
+  width: 13px;
+  height: 13px;
+}
+.sidecar-agent-panel .sa-progress-bar {
+  position: relative;
+  flex: 0 1 140px;
+  min-width: 50px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+.sidecar-agent-panel .sa-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--sa-progress-color);
+  transition: width 0.4s ease;
+}
+.sidecar-agent-panel .sa-progress-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+}
+.sidecar-agent-panel .sa-progress-step {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidecar-agent-panel .sa-progress-step.is-muted {
+  color: var(--text-faint);
+}
+.sidecar-agent-panel .sa-progress-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
