@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.1
+
+- The limit bars of the Gemini quotas (Antigravity: Gemini group and Argon) are a subtle blue instead of the accent color. Orange and red from 70 and 90 % stay.
 ## 1.8.0
 
 - Usage limits as bars in the info line, in the same style as the context chip: "5h" and "week" for Claude and for the Antigravity model group of the session, for Antigravity also "Argon" (the separate Gemini 4 Argon weekly quota). Orange from 70 %, red from 90 %, the tooltip shows group, percentage and reset time. In an Argon session, 5h and week come from the general Gemini group.

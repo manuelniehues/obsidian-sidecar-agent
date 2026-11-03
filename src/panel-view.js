@@ -575,7 +575,7 @@ export class AgentPanelView extends ItemView {
       if (x.b.used == null) continue;
       const pct = Math.max(0, Math.min(100, Math.round(x.b.used)));
       const lvl = pct >= 90 ? " is-crit" : pct >= 70 ? " is-warn" : "";
-      const chip = el.createSpan({ cls: `sa-context sa-limit-bar${lvl}` });
+      const chip = el.createSpan({ cls: `sa-context sa-limit-bar${lvl}${/gemini/i.test(x.group) ? " is-gemini" : ""}` });
       chip.createSpan({ cls: "sa-limit-label", text: x.short });
       const bar = chip.createSpan({ cls: "sa-context-bar" });
       bar.createSpan({ cls: "sa-context-fill" }).style.width = `${pct}%`;

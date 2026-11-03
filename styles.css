@@ -492,6 +492,10 @@ body.sa-resizing.sa-resizing * {
   width: 12px;
   height: 12px;
 }
+/* Gemini quota bars (Antigravity): subtle blue instead of the accent, warning colors still win */
+.sidecar-agent-panel .sa-limit-bar.is-gemini:not(.is-warn):not(.is-crit) {
+  --sa-ctx-color: color-mix(in srgb, var(--color-blue) 45%, var(--background-modifier-border));
+}
 .sidecar-agent-panel .sa-limit-label {
   color: var(--text-faint);
 }
