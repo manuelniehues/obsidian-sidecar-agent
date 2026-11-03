@@ -150,6 +150,8 @@ export class AgentPanelView extends ItemView {
     };
     mkA("at-sign", t("panel.note"), t("panel.noteTip"), () => this.plugin.insertActiveNote());
     mkA("text-select", t("panel.selection"), t("panel.selectionTip"), () => this.plugin.insertActiveSelection());
+    // Note-context chip (Claude sessions), between "Selection" and "Stop"
+    this.ctxSlot = act.createDiv({ cls: "sa-ctx-slot" });
     mkA("square", t("panel.stop"), t("cmd.interrupt"), () => this.active?.interrupt());
 
     this.applyLayout();
@@ -473,16 +475,11 @@ export class AgentPanelView extends ItemView {
     const el = this.infoEl;
     el.empty();
     const s = this.active;
+    this.renderCtxChip(s);
     if (!s) {
       el.createSpan({ cls: "sa-info-muted", text: t("panel.empty") });
       return;
     }
-    const dot = el.createSpan({ cls: `sa-dot ${s.running ? "is-running" : s.exited ? "is-exited" : ""}${s.running && s.agentState === "waiting" ? " is-waiting" : ""}` });
-    dot.setAttr("aria-label", this.stateLabel(s));
-    setIcon(el.createSpan({ cls: `sa-info-icon${this.isBusy(s) ? " is-busy" : ""}` }), AGENTS[s.st.agent]?.icon || "terminal");
-    const name = el.createSpan({ cls: "sa-info-name", text: s.title() });
-    name.setAttr("aria-label", t("info.clickToRename"));
-    name.onclick = () => this.plugin.renameTerminal(s);
     // Model and effort switches (apply to this session only)
     const chip = (icon, text, label, fn) => {
       const c = el.createEl("button", { cls: "sa-chip-btn", attr: { "aria-label": label } });
@@ -533,19 +530,6 @@ export class AgentPanelView extends ItemView {
       const when = (b) => (b?.resetsAt ? new Date(b.resetsAt).toLocaleString(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "?");
       chipL.setAttr("aria-label", t("limits.tip", { label: lim.label, five: fmt(lim.fiveHour), fiveAt: when(lim.fiveHour), week: fmt(lim.week), weekAt: when(lim.week) }));
     }
-    if (s.st.agent === "claude") {
-      const on = this.plugin.settings.noteContext !== false;
-      const np = this.plugin.ctxPath;
-      const sel = this.plugin.ctxSel;
-      const nc = el.createEl("button", { cls: `sa-ctx clickable-icon${on ? " is-on" : ""}` });
-      setIcon(nc.createSpan({ cls: "sa-chip-icon" }), on ? "file-text" : "file-x");
-      if (on && np) nc.createSpan({ cls: "sa-ctx-name", text: np.split("/").pop().replace(/\.md$/, "") + (sel ? " ✂︎" : "") });
-      nc.setAttr("aria-label", on ? t(sel ? "ctx.onSel" : "ctx.on", { path: np || t("ctx.noNote") }) : t("ctx.off"));
-      nc.onclick = (ev) => {
-        ev.stopPropagation();
-        this.plugin.toggleNoteContext();
-      };
-    }
     const lockOn = !!this.plugin.settings.focusLock;
     const lock = el.createEl("button", { cls: `sa-lock clickable-icon${lockOn ? " is-on" : ""}`, attr: { "aria-label": lockOn ? t("lock.on") : t("lock.off") } });
     setIcon(lock, lockOn ? "lock" : "lock-open");
@@ -554,6 +538,25 @@ export class AgentPanelView extends ItemView {
       this.plugin.toggleFocusLock();
     };
     el.createSpan({ cls: "sa-info-meta", text: bits.filter(Boolean).join(" · ") });
+  }
+
+  /** Note-context chip in the action row (Claude only): which note goes along with each message, click toggles. */
+  renderCtxChip(s) {
+    const slot = this.ctxSlot;
+    if (!slot) return;
+    slot.empty();
+    if (s?.st.agent !== "claude") return;
+    const on = this.plugin.settings.noteContext !== false;
+    const np = this.plugin.ctxPath;
+    const sel = this.plugin.ctxSel;
+    const nc = slot.createEl("button", { cls: `sa-ctx clickable-icon${on ? " is-on" : ""}` });
+    setIcon(nc.createSpan({ cls: "sa-chip-icon" }), on ? "file-text" : "file-x");
+    if (on && np) nc.createSpan({ cls: "sa-ctx-name", text: np.split("/").pop().replace(/\.md$/, "") + (sel ? " ✂︎" : "") });
+    nc.setAttr("aria-label", on ? t(sel ? "ctx.onSel" : "ctx.on", { path: np || t("ctx.noNote") }) : t("ctx.off"));
+    nc.onclick = (ev) => {
+      ev.stopPropagation();
+      this.plugin.toggleNoteContext();
+    };
   }
 
   /** Context window fill level as a small bar (Claude only; Antigravity reports no context usage). */

@@ -162,8 +162,7 @@
   color: var(--text-muted);
 }
 .sidecar-agent-panel .sa-claude .sa-icon,
-.sidecar-agent-panel .sa-tab .sa-tab-icon,
-.sidecar-agent-panel .sa-info-icon {
+.sidecar-agent-panel .sa-tab .sa-tab-icon {
   color: #d97757;
 }
 .sidecar-agent-panel .sa-agy .sa-icon,
@@ -365,22 +364,6 @@ body.sa-resizing.sa-resizing * {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
-.sidecar-agent-panel .sa-info-icon svg {
-  width: 13px;
-  height: 13px;
-}
-.sidecar-agent-panel .sa-info-name {
-  color: var(--text-normal);
-  font-weight: var(--font-semibold);
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 50%;
-}
-.sidecar-agent-panel .sa-info-name:hover {
-  text-decoration: underline;
-}
 .sidecar-agent-panel .sa-info-meta {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -389,23 +372,17 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-info-muted {
   color: var(--text-faint);
 }
-.sidecar-agent-panel .sa-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-faint);
-}
-.sidecar-agent-panel .sa-dot.is-running {
-  background: var(--color-green);
-}
-.sidecar-agent-panel .sa-dot.is-exited {
-  background: var(--color-orange);
-}
 .sidecar-agent-panel .sa-actions {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+.sidecar-agent-panel .sa-ctx-slot {
+  display: inline-flex;
+  min-width: 0;
+}
+.sidecar-agent-panel .sa-ctx-slot:empty {
+  display: none;
 }
 
 /* ---------- dialogs ---------- */
@@ -712,11 +689,7 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-agy .sa-state.is-unseen {
   background: var(--sa-agy-color);
 }
-.sidecar-agent-panel .sa-dot.is-waiting {
-  background: var(--color-orange);
-}
-.sidecar-agent-panel .sa-tab-icon.is-busy,
-.sidecar-agent-panel .sa-info-icon.is-busy {
+.sidecar-agent-panel .sa-tab-icon.is-busy {
   display: inline-flex; /* transform needs a box */
   transform-origin: center;
   animation: sa-pulse 1.4s ease-in-out infinite;
@@ -733,8 +706,7 @@ body.sa-resizing.sa-resizing * {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sidecar-agent-panel .sa-tab-icon.is-busy,
-  .sidecar-agent-panel .sa-info-icon.is-busy {
+  .sidecar-agent-panel .sa-tab-icon.is-busy {
     animation: none;
   }
 }

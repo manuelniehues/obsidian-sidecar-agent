@@ -173,7 +173,6 @@ const EN = {
   "view.reader": "Read",
   "view.readerTip": "Reading view: the history like a note, with clickable links and an input field.",
 
-  "info.clickToRename": "Click to rename",
   "info.switchModel": "Switch model (this session only)",
   "info.switchEffort": "Switch effort (this session only)",
   "info.endedHint": "ended · Enter in the terminal resumes",
@@ -446,7 +445,6 @@ const DE = {
   "view.reader": "Lesen",
   "view.readerTip": "Leseansicht: Verlauf wie eine Notiz, mit klickbaren Links und Eingabefeld.",
 
-  "info.clickToRename": "Klicken zum Umbenennen",
   "info.switchModel": "Modell wechseln (nur diese Session)",
   "info.switchEffort": "Effort wechseln (nur diese Session)",
   "info.endedHint": "beendet · Enter im Terminal setzt fort",

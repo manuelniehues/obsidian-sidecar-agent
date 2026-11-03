@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1
+
+- Leaner info line: the session name, agent icon and state dot are gone from it, the active tab already shows all three (rename: right-click the tab).
+- The note-context chip (which note goes along with your message) moved from the info line to the action row, between "Selection" and "Stop".
 ## 1.7.0
 
 - Progress row under the session tabs while an agent works: a bar with "3/7" and the current step from Claude's task list (hover shows all steps: ✓ done, ▶ running, ○ open), plus the time since the job started. Without a task list, or for Antigravity, only the time.
