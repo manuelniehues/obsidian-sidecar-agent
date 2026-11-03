@@ -412,13 +412,21 @@ body.sa-resizing.sa-resizing * {
   height: auto;
   padding: 1px 5px 1px 6px;
   font-size: var(--font-ui-smaller);
-  color: var(--text-normal);
+  color: var(--text-muted);
   background: var(--background-modifier-hover);
   box-shadow: none;
   border-radius: 10px;
 }
 .sidecar-agent-panel .sa-chip-btn:hover {
+  color: var(--text-normal);
   background: var(--background-modifier-active-hover);
+}
+/* Action row: same muted text as the info line */
+.sidecar-agent-panel .sa-actions .sa-btn {
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-actions .sa-btn:hover {
+  color: var(--text-normal);
 }
 .sidecar-agent-panel .sa-chip-icon {
   display: inline-flex;

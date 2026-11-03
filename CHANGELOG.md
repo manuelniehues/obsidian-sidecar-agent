@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.2
+
+- Consistent text color in the bottom rows: model and effort switches and the Note, Selection and Stop buttons now use the same muted color as the rest of the info line, full color on hover.
 ## 1.7.1
 
 - Leaner info line: the session name, agent icon and state dot are gone from it, the active tab already shows all three (rename: right-click the tab).
