@@ -853,7 +853,7 @@ body.sa-resizing.sa-resizing * {
 
 /* Voice input */
 .sidecar-agent-panel .sa-actions .sa-mic.is-recording {
-  color: var(--color-red);
+  color: var(--color-green);
   animation: sa-mic-pulse 1.2s ease-in-out infinite;
 }
 .sidecar-agent-panel .sa-actions .sa-mic.is-busy .sa-btn-icon svg {

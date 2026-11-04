@@ -197,7 +197,7 @@ export class AgentPanelView extends ItemView {
     if (!b) return;
     b.toggleClass("is-recording", st === "recording");
     b.toggleClass("is-busy", st === "transcribing");
-    setIcon(b.querySelector(".sa-btn-icon"), st === "transcribing" ? "loader" : st === "recording" ? "mic-off" : "mic");
+    setIcon(b.querySelector(".sa-btn-icon"), st === "transcribing" ? "loader" : "mic");
     b.setAttr("aria-label", st === "recording" ? t("panel.dictateStop") : st === "transcribing" ? t("panel.dictateBusy") : t("panel.dictateTip"));
   }
 

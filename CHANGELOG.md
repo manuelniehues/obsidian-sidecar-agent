@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.1
+
+- The microphone button shows a green, pulsing microphone while recording, instead of a red crossed-out one that looked like "microphone off".
 ## 1.10.0
 
 - Voice input: a microphone button in the action row and the command "Voice input: start/stop recording" (assign a hotkey if you like). Click once to talk, click again to stop; the text lands in the prompt line of the active session and is not sent on its own.
