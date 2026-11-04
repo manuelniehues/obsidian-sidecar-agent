@@ -21,6 +21,7 @@ import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker } from "./tr
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
+import { Dictation } from "./dictation";
 
 const THEME_NAME = "sidecar-agent";
 
@@ -40,6 +41,7 @@ export default class SidecarAgentPlugin extends Plugin {
     this.terminals = new Set();
     this.activeTerminal = null;
     this.store = new SessionStore(this);
+    this.dictation = new Dictation(this);
 
     this.registerView(VIEW_PANEL, (leaf) => new AgentPanelView(leaf, this));
     this.addSettingTab(new SidecarSettingTab(this.app, this));
@@ -91,6 +93,7 @@ export default class SidecarAgentPlugin extends Plugin {
         return true;
       },
     });
+    this.addCommand({ id: "dictate", name: t("cmd.dictate"), callback: () => this.dictation.toggle() });
     this.addCommand({ id: "toggle-focus-lock", name: t("cmd.focusLock"), callback: () => this.toggleFocusLock() });
     this.addCommand({ id: "reload-when-idle", name: t("cmd.reloadIdle"), callback: () => this.reloadWhenIdle() });
     this.addCommand({ id: "whats-new", name: t("cmd.whatsNew"), callback: () => this.showWhatsNew(true) });
@@ -203,6 +206,7 @@ export default class SidecarAgentPlugin extends Plugin {
   }
 
   onunload() {
+    this.dictation?.cancel();
     for (const v of this.terminals || []) {
       v.kill();
       v.unwatchFiles?.();
@@ -255,6 +259,8 @@ export default class SidecarAgentPlugin extends Plugin {
       // Plugin sessions only (--settings applies to this process): status line for the usage limits,
       // note-context hook, color scheme and auto-continue. The global Claude settings stay untouched.
       const extra = { autoContinueAtUsageLimit: true };
+      // Claude's own dictation (hold to talk); the microphone button drives it by imitating a held space key.
+      if (s.claudeVoice) extra.voice = { enabled: true, mode: "hold" };
       const sl = this.writeHelperScript("statusline.py", STATUSLINE_PY);
       if (sl) extra.statusLine = { type: "command", command: sl, padding: 0 };
       // The hook is always installed; it reads the on/off switch from the context file at every message.

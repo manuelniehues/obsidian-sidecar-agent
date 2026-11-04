@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.0
+
+- Voice input: a microphone button in the action row and the command "Voice input: start/stop recording" (assign a hotkey if you like). Click once to talk, click again to stop; the text lands in the prompt line of the active session and is not sent on its own.
+- Claude sessions use Claude Code's own dictation: plugin sessions start with voice mode on (hold space to talk, also works on the keyboard), and the button holds the key for you. Fast, no key needed, part of your Claude account. Can be switched off in the settings.
+- Antigravity sessions (or Claude sessions with that setting off) transcribe with the Gemini API. Add a Gemini API key under Settings → Voice input; a free key from Google AI Studio is enough. The key is kept in Obsidian's secret storage on this device. The newest Flash model is used, with a fallback to the next one when a model is overloaded. A vocabulary list helps with names and technical terms.
 ## 1.9.0
 
 - Vault paths and `[[wikilinks]]` in the terminal are links. A click opens a note (or a PDF, image, canvas …) in a new tab, or focuses the tab that already shows it; other files and folders are shown in Finder, nothing is ever run. Paths may contain spaces and a trailing `:12`; only targets that exist are underlined. Option-click shows a note in Finder instead.

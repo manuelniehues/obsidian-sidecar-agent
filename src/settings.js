@@ -1,4 +1,5 @@
 // Sidecar Agent – settings
+import { SECRET_ID } from "./dictation";
 import { PluginSettingTab, Setting } from "obsidian";
 import { t, locale, setLanguage } from "./i18n";
 import { DEFAULT_FONT } from "./session";
@@ -48,6 +49,10 @@ export const DEFAULT_SETTINGS = {
   agyModelsCache: null,
   showWhatsNew: true, // changelog once after an update
   lastSeenVersion: "",
+  claudeVoice: true, // Claude sessions: microphone button uses Claude's own dictation
+  dictationKey: "", // only used when Obsidian has no secret storage (before 1.11.4)
+  dictationModel: "", // "" = newest Flash model of the key
+  dictationVocabulary: "",
   agyIds: [], // Antigravity conversations started in this vault (agy often stores no working folder)
 };
 
@@ -282,6 +287,57 @@ export class SidecarSettingTab extends PluginSettingTab {
       );
 
     // ---------------------------------------------------------------- reading view
+    // ---------------------------------------------------------------- voice input
+    new Setting(el).setName(t("set.dictHeading")).setHeading();
+    new Setting(el)
+      .setName(t("set.claudeVoice"))
+      .setDesc(t("set.claudeVoiceDesc"))
+      .addToggle((tg) =>
+        tg.setValue(s.claudeVoice).onChange((v) => {
+          s.claudeVoice = v;
+          save();
+        }),
+      );
+    const ss = p.app.secretStorage;
+    new Setting(el)
+      .setName(t("set.dictKey"))
+      .setDesc(t(ss ? "set.dictKeyDesc" : "set.dictKeyDescPlain"))
+      .addText((tx) => {
+        tx.inputEl.type = "password";
+        tx.setValue(ss ? ss.getSecret(SECRET_ID) || "" : s.dictationKey)
+          .onChange((v) => {
+            p.dictation.ranked = null;
+            if (ss) ss.setSecret(SECRET_ID, v.trim());
+            else {
+              s.dictationKey = v.trim();
+              save();
+            }
+          });
+      });
+    new Setting(el)
+      .setName(t("set.dictModel"))
+      .setDesc(t("set.dictModelDesc"))
+      .addText((tx) =>
+        tx
+          .setPlaceholder(p.dictation.model || "gemini-…-flash")
+          .setValue(s.dictationModel)
+          .onChange((v) => {
+            s.dictationModel = v.trim();
+            p.dictation.model = "";
+            p.dictation.ranked = null;
+            save();
+          }),
+      );
+    new Setting(el)
+      .setName(t("set.dictVocab"))
+      .setDesc(t("set.dictVocabDesc"))
+      .addTextArea((tx) =>
+        tx.setValue(s.dictationVocabulary).onChange((v) => {
+          s.dictationVocabulary = v;
+          save();
+        }),
+      );
+
     new Setting(el).setName(t("set.readerHeading")).setHeading();
     let customEl;
     new Setting(el)

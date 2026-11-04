@@ -850,3 +850,22 @@ body.sa-resizing.sa-resizing * {
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
+
+/* Voice input */
+.sidecar-agent-panel .sa-actions .sa-mic.is-recording {
+  color: var(--color-red);
+  animation: sa-mic-pulse 1.2s ease-in-out infinite;
+}
+.sidecar-agent-panel .sa-actions .sa-mic.is-busy .sa-btn-icon svg {
+  animation: sa-spin 1s linear infinite;
+}
+@keyframes sa-mic-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes sa-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

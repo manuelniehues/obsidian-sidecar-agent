@@ -153,6 +153,8 @@ export class AgentPanelView extends ItemView {
     mkA("text-select", t("panel.selection"), t("panel.selectionTip"), () => this.plugin.insertActiveSelection());
     // Note-context chip (Claude sessions), between "Selection" and "Stop"
     this.ctxSlot = act.createDiv({ cls: "sa-ctx-slot" });
+    this.micBtn = mkA("mic", "", t("panel.dictateTip"), () => this.plugin.dictation.toggle());
+    this.micBtn.addClass("sa-mic");
     mkA("square", t("panel.stop"), t("cmd.interrupt"), () => this.active?.interrupt());
 
     this.applyLayout();
@@ -163,6 +165,7 @@ export class AgentPanelView extends ItemView {
     this.registerEvent(this.plugin.on("terminals-changed", () => this.renderAll()));
     this.registerEvent(this.plugin.on("context-changed", () => this.renderInfo()));
     this.registerEvent(this.plugin.on("progress-changed", () => this.renderProgress()));
+    this.registerEvent(this.plugin.on("dictation-changed", (st) => this.renderMic(st)));
     this.registerInterval(window.setInterval(() => this.tickElapsed(), 1000));
     this.registerEvent(this.app.workspace.on("css-change", () => this.sessions.forEach((s) => s.applyOptions())));
 
@@ -187,6 +190,15 @@ export class AgentPanelView extends ItemView {
     this.sessions = [];
     this.active = null;
     this.plugin.trigger("terminals-changed");
+  }
+
+  renderMic(st) {
+    const b = this.micBtn;
+    if (!b) return;
+    b.toggleClass("is-recording", st === "recording");
+    b.toggleClass("is-busy", st === "transcribing");
+    setIcon(b.querySelector(".sa-btn-icon"), st === "transcribing" ? "loader" : st === "recording" ? "mic-off" : "mic");
+    b.setAttr("aria-label", st === "recording" ? t("panel.dictateStop") : st === "transcribing" ? t("panel.dictateBusy") : t("panel.dictateTip"));
   }
 
   // ------------------------------------------------------------------ layout
