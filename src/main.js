@@ -14,7 +14,8 @@ import SESSION_HOOK_PY from "./py/session_hook.py";
 import STATE_HOOK_PY from "./py/state_hook.py";
 import { AgentPanelView, VIEW_PANEL } from "./panel-view";
 import { isDarkTheme, obsidianAccent } from "./session";
-import { ConfirmModal, EFFORTS, NewSessionModal, TextModal, WhatsNewModal } from "./modals";
+import { presetLabel } from "./presets";
+import { ConfirmModal, EFFORTS, NewSessionModal, PresetsModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
 import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker } from "./transcript";
@@ -1224,20 +1225,51 @@ export default class SidecarAgentPlugin extends Plugin {
   openNewSessionModal(opts) {
     new NewSessionModal(this, {
       ...opts,
-      onSubmit: async (v) => {
-        const st = {
-          agent: v.agent,
-          mode: "new",
-          model: v.model || undefined,
-          effort: v.effort || undefined,
-          name: v.name || undefined,
-          initialPrompt: v.initialPrompt || undefined,
-          notePath: v.notePath,
-        };
-        const s = await this.openTerminal(st);
-        if (v.name && s?.st?.sessionId) this.setAlias(`${v.agent}:${s.st.sessionId}`, v.name);
+      allowNewestFlash: true,
+      onSavePreset: async (v) => {
+        const name = presetLabel(v);
+        this.settings.presets.push({ name, agent: v.agent, model: v.model, effort: v.effort, initialPrompt: v.initialPrompt, withNote: v.withNote });
+        await this.saveSettings();
+        new Notice(t("preset.saved", { name }));
       },
+      onSubmit: (v) => this.startFromForm(v),
     }).open();
+  }
+
+  /** Starts a session from the values of the dialog or of a standard task. */
+  async startFromForm(v) {
+    // "newest-flash" is resolved at the start, so a saved task follows new models
+    const model = v.model === "newest-flash" ? newestFlashModel(await this.modelOptions("agy")) : v.model;
+    const s = await this.openTerminal({
+      agent: v.agent,
+      mode: "new",
+      model: model || undefined,
+      effort: v.effort || undefined,
+      name: v.name || undefined,
+      initialPrompt: v.initialPrompt || undefined,
+      notePath: v.notePath,
+    });
+    if (v.name && s?.st?.sessionId) this.setAlias(`${v.agent}:${s.st.sessionId}`, v.name);
+    return s;
+  }
+
+  startPreset(p) {
+    const notePath = p.withNote ? this.app.workspace.getActiveFile()?.path : undefined;
+    return this.startFromForm({ ...p, notePath });
+  }
+
+  /** The options button: standard tasks first; without any it goes straight to the dialog. */
+  presetMenu(ev) {
+    const list = this.settings.presets;
+    if (!list.length) return this.openNewSessionModal({});
+    const m = new Menu();
+    for (const p of list) {
+      m.addItem((i) => i.setTitle(presetLabel(p)).setIcon(AGENTS[p.agent]?.icon || "play").onClick(() => this.startPreset(p)));
+    }
+    m.addSeparator();
+    m.addItem((i) => i.setTitle(t("preset.options")).setIcon("sliders-horizontal").onClick(() => this.openNewSessionModal({})));
+    m.addItem((i) => i.setTitle(t("preset.manage")).setIcon("list-checks").onClick(() => new PresetsModal(this).open()));
+    m.showAtMouseEvent(ev);
   }
 
   async resume(e, { fork = false } = {}) {

@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS = {
   dictationKey: "", // only used when Obsidian has no secret storage (before 1.11.4)
   dictationModel: "", // "" = newest Flash model of the key
   dictationVocabulary: "",
+  presets: [], // standard tasks: {name, agent, model, effort, initialPrompt, withNote}
   agyIds: [], // Antigravity conversations started in this vault (agy often stores no working folder)
 };
 

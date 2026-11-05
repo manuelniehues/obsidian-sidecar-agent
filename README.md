@@ -50,7 +50,8 @@ Manual installation: download `main.js`, `manifest.json` and `styles.css` from t
 
 | What | How |
 |---|---|
-| New session | **Claude** or **Antigravity** button at the top. The sliders button opens a dialog with agent, model, effort, name, first message and the current note. |
+| New session | **Claude** or **Antigravity** button at the bottom of the panel. The sliders button opens a dialog with agent, model, effort, name, first message and the current note. |
+| Standard tasks | Save a recurring job from that dialog with **Save as standard task** (agent, model, effort, first message, current note yes or no). The sliders button then opens a list of your tasks; one click starts the session. "Newest Flash model" stays current for Antigravity. Sort, edit and delete under **Edit standard tasks…** in the same list. |
 | Resume | Click a session in the list. If it is already open, the panel just switches to it. |
 | More actions | Right-click a session: resume, fork (Claude), resume with another model, rename, copy ID. Right-click a tab: rename, restart, close. |
 | Type | Directly in the agent's prompt line in the terminal. Shift+Enter adds a new line. |

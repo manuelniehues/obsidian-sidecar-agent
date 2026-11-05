@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.0
+
+- Standard tasks: save a recurring job with **Save as standard task** in the new-session dialog (agent, model, effort, first message, current note yes or no). The sliders button then opens a list of your tasks, and one click starts the session. Sort, edit and delete under **Edit standard tasks…** in that list. For Antigravity you can pick "Newest Flash model", so a saved task follows new models.
+- New layout: the session list, the Claude and Antigravity buttons and the search moved to the bottom of the panel. The list opens right above the buttons that control it, and the terminal stays on top. Both button rows use equal widths, so their columns line up.
+- Fixed: the pulsing icon of an Antigravity session could keep going after the task ended. This happened when Antigravity cancelled a background task itself, and when it compacted the conversation right after an answer.
+
 ## 1.10.1
 
 - The microphone button shows a green, pulsing microphone while recording, instead of a red crossed-out one that looked like "microphone off".

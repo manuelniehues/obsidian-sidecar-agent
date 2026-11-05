@@ -73,10 +73,11 @@ export class AgentPanelView extends ItemView {
     root.addClass("sidecar-agent-panel");
     const lay = this.plugin.settings.layout;
 
-    // ---- top: sessions
+    // ---- sessions: list above the bars, both at the bottom of the panel (order set further down)
     this.topEl = root.createDiv({ cls: "sa-top" });
-    const bar = this.topEl.createDiv({ cls: "sa-toolbar" });
-    this.collapseBtn = iconBtn(bar, lay.topCollapsed ? "chevron-right" : "chevron-down", t("panel.toggleList"), () => this.toggleTop());
+    this.barsEl = root.createDiv({ cls: "sa-bars" });
+    const bar = this.barsEl.createDiv({ cls: "sa-toolbar" });
+    this.collapseBtn = iconBtn(bar, lay.topCollapsed ? "chevron-up" : "chevron-down", t("panel.toggleList"), () => this.toggleTop());
     const mk = (icon, text, label, fn, cls = "") => {
       const b = bar.createEl("button", { cls: `sa-btn ${cls}`, attr: { "aria-label": label } });
       setIcon(b.createSpan({ cls: "sa-btn-icon" }), icon);
@@ -86,11 +87,10 @@ export class AgentPanelView extends ItemView {
     };
     mk(AGENTS.claude.icon, "Claude", t("cmd.newClaude"), () => this.plugin.startNew({ agent: "claude" }), "mod-cta sa-claude");
     mk(AGENTS.agy.icon, "Antigravity", t("cmd.newAgy"), () => this.plugin.startNew({ agent: "agy" }), "mod-cta sa-agy");
-    bar.createDiv({ cls: "sa-spacer" });
-    iconBtn(bar, "sliders-horizontal", t("panel.newWithOptions"), () => this.plugin.openNewSessionModal({}));
+    iconBtn(bar, "sliders-horizontal", t("panel.newWithOptions"), (ev) => this.plugin.presetMenu(ev));
     iconBtn(bar, "refresh-cw", t("panel.reload"), () => this.plugin.store.refresh());
 
-    const search = this.topEl.createDiv({ cls: "sa-search" });
+    const search = this.barsEl.createDiv({ cls: "sa-search" });
     this.searchInput = search.createEl("input", { type: "search", placeholder: t("panel.searchPlaceholder") });
     this.searchInput.oninput = () => {
       this.query = this.searchInput.value.trim();
@@ -156,6 +156,8 @@ export class AgentPanelView extends ItemView {
     this.micBtn = mkA("mic", "", t("panel.dictateTip"), () => this.plugin.dictation.toggle());
     this.micBtn.addClass("sa-mic");
     mkA("square", t("panel.stop"), t("cmd.interrupt"), () => this.active?.interrupt());
+    // Terminal with its info rows first; the list opens right above the bars that control it
+    root.append(this.split1, this.topEl, this.barsEl);
 
     this.applyLayout();
     this.initSplitter(this.split1);
@@ -207,7 +209,7 @@ export class AgentPanelView extends ItemView {
     this.listWrap.toggle(!lay.topCollapsed);
     this.split1.toggle(!lay.topCollapsed);
     this.topEl.setCssStyles({ height: lay.topCollapsed ? "auto" : `${lay.top}px` });
-    setIcon(this.collapseBtn, lay.topCollapsed ? "chevron-right" : "chevron-down");
+    setIcon(this.collapseBtn, lay.topCollapsed ? "chevron-up" : "chevron-down");
     this.active?.scheduleFit();
   }
 
@@ -228,8 +230,8 @@ export class AgentPanelView extends ItemView {
       const total = this.contentEl.clientHeight;
       document.body.addClass("sa-resizing");
       const move = (e) => {
-        const room = total - this.bottomEl.offsetHeight - 120; // keep room for the terminal
-        const h = Math.max(90, Math.min(start + e.clientY - startY, room));
+        const room = total - this.bottomEl.offsetHeight - this.barsEl.offsetHeight - 120; // keep room for the terminal
+        const h = Math.max(90, Math.min(start - (e.clientY - startY), room)); // the list sits below the handle
         lay.top = Math.round(h);
         this.topEl.setCssStyles({ height: `${h}px` });
         this.active?.scheduleFit();

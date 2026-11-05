@@ -77,13 +77,16 @@ export function agyTail(text, mtime = 0) {
     } catch {
       continue; // the first line of a chunk may be cut off
     }
+    // agy compacts the conversation after an answer: such a step is no activity and hides nothing
+    if (d.type === "CHECKPOINT" || d.type === "CONVERSATION_HISTORY") continue;
     if (last === undefined) last = d;
     // Background tasks: agy continues by itself when one finishes. The step keeps status RUNNING in the
-    // transcript even afterwards, the end comes as a system message naming the task id.
+    // transcript even afterwards, the end comes as a system message naming the task id. A task agy cancels
+    // itself ends the same way, the system message may arrive late, so its own "cancelled." counts too.
     const c = typeof d.content === "string" ? d.content : "";
     let m = c.match(/running as a background task with task id: (\S+)/);
     if (m) started.add(m[1]);
-    for (m of c.matchAll(/Task id "([^"]+)" finished/g)) finished.add(m[1]);
+    for (m of c.matchAll(/Task(?: id)? "([^"]+)" (?:finished|was canceled|cancelled)/g)) finished.add(m[1]);
     if (!rec && d.input_tokens != null) rec = { at: Date.parse(d.created_at) || mtime, used_tokens: (d.input_tokens || 0) + (d.cache_read_tokens || 0) };
   }
   if (!last) return rec;

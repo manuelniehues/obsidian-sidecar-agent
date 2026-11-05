@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { FIX } from "./helpers.mjs";
+import { presetLabel } from "../src/presets.js";
 import { agyTail, creditsShown, findUsageLimit, ingestLine, osc52Text, parseResetText, toMs, touchesFile } from "../src/transcript.js";
 
 const claudeLines = fs.readFileSync(path.join(FIX, "claude", "11111111-2222-3333-4444-555555555555.jsonl"), "utf8").split("\n").filter(Boolean);
@@ -73,6 +74,32 @@ test("Antigravity tail: tokens and whether the answer is complete", () => {
   ];
   const e = agyTail(end.join("\n"));
   assert.deepEqual([e.final, e.background, e.text], [true, 0, "FERTIG"]);
+
+  // agy cancelled its background task itself: the answer after it is final, right after the tool result too
+  const cancelled = [
+    bg[0],
+    bg[1],
+    JSON.stringify({ step_index: 3, type: "GENERIC", status: "DONE", content: 'Task "c1/task-2" cancelled.' }),
+    JSON.stringify({ step_index: 4, type: "PLANNER_RESPONSE", status: "DONE", input_tokens: 1, cache_read_tokens: 1, content: "FERTIG" }),
+  ];
+  assert.deepEqual([agyTail(cancelled.join("\n")).final, agyTail(cancelled.join("\n")).background], [true, 0]);
+  const canceledMsg = [bg[0], bg[1], JSON.stringify({ step_index: 3, type: "SYSTEM_MESSAGE", status: "DONE", content: 'content=Task id "c1/task-2" was canceled with result:\n' }), JSON.stringify({ step_index: 4, type: "PLANNER_RESPONSE", status: "DONE", content: "FERTIG" })];
+  assert.equal(agyTail(canceledMsg.join("\n")).final, true, "the system message about a cancelled task ends it as well");
+
+  // agy compacted the conversation after the answer: still finished
+  const compacted = [...end, JSON.stringify({ step_index: 9, source: "SYSTEM", type: "CHECKPOINT", status: "DONE", content: "{{ CHECKPOINT 0 }}" })];
+  assert.deepEqual([agyTail(compacted.join("\n")).final, agyTail(compacted.join("\n")).text], [true, "FERTIG"]);
+
+  // An error is no end: agy retries by itself
+  const err = [bg[0], JSON.stringify({ step_index: 2, source: "SYSTEM", type: "ERROR_MESSAGE", status: "DONE", content: "" })];
+  assert.equal(agyTail(err.join("\n")).final, false);
+});
+
+test("standard task label: name, else start of the first message", () => {
+  assert.equal(presetLabel({ name: " Inbox ", initialPrompt: "x" }), "Inbox");
+  assert.equal(presetLabel({ name: "", initialPrompt: "Erste Zeile\nzweite" }), "Erste Zeile");
+  assert.equal(presetLabel({ initialPrompt: "a".repeat(60) }), `${"a".repeat(50)}…`);
+  assert.equal(presetLabel({}), "");
 });
 
 test("usage credits only from Claude's footer", () => {

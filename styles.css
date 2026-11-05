@@ -385,6 +385,27 @@ body.sa-resizing.sa-resizing * {
   display: none;
 }
 
+/* ---------- sessions: new session + search, below the list ---------- */
+.sidecar-agent-panel .sa-bars {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px 6px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.sidecar-agent-panel .sa-bars .sa-toolbar,
+.sidecar-agent-panel .sa-bars .sa-search {
+  padding: 0;
+}
+/* Both button rows: equal cells, so their columns line up */
+.sidecar-agent-panel .sa-actions > *,
+.sidecar-agent-panel .sa-bars .sa-toolbar > * {
+  flex: 1 1 0;
+  min-width: min-content;
+  justify-content: center;
+}
+
 /* ---------- dialogs ---------- */
 .sidecar-agent-modal .sa-prompt-setting {
   flex-direction: column;
@@ -396,7 +417,7 @@ body.sa-resizing.sa-resizing * {
 }
 
 /* Obsidian's status bar floats over the bottom right of the sidebar (position: fixed, about 32 px) */
-.mod-right-split .sidecar-agent-panel .sa-bottom {
+.mod-right-split .sidecar-agent-panel .sa-bars {
   padding-bottom: 36px;
 }
 

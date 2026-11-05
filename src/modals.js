@@ -1,6 +1,7 @@
 // Sidecar Agent – dialogs (new session, rename, confirm)
-import { Component, MarkdownRenderer, Modal, Setting } from "obsidian";
+import { Component, MarkdownRenderer, Modal, Notice, Setting } from "obsidian";
 import { AGENTS } from "./util";
+import { presetLabel } from "./presets";
 import { t } from "./i18n";
 
 /** "What's new" after an update: the changelog sections since the last version the user saw. */
@@ -51,7 +52,8 @@ export const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
 
 /**
  * Dialog for a new session, or for resuming with different options.
- * opts: { agent, model, effort, name, initialPrompt, title, lockAgent, hideName, hidePrompt, submitText, onSubmit(state) }
+ * opts: { agent, model, effort, name, initialPrompt, title, lockAgent, hideName, hidePrompt, submitText, onSubmit(state),
+ *   withNote, presetForm (edits a standard task), onSavePreset(state), allowNewestFlash }
  */
 export class NewSessionModal extends Modal {
   constructor(plugin, opts = {}) {
@@ -65,7 +67,7 @@ export class NewSessionModal extends Modal {
       effort: opts.effort ?? "",
       name: opts.name || "",
       initialPrompt: opts.initialPrompt || "",
-      withNote: false,
+      withNote: !!opts.withNote,
     };
   }
 
@@ -97,6 +99,7 @@ export class NewSessionModal extends Modal {
       .setDesc(v.agent === "claude" ? t("modal.modelDescClaude") : t("modal.modelDescAgy"))
       .addDropdown((d) => {
         d.addOption("", defLabel);
+        if (v.agent === "agy" && this.opts.allowNewestFlash) d.addOption("newest-flash", t("set.agyModelFlash"));
         for (const [id, label] of models) d.addOption(id, label);
         if (v.model && !models.some(([id]) => id === v.model)) d.addOption(v.model, v.model);
         d.setValue(v.model).onChange((x) => (v.model = x));
@@ -125,23 +128,35 @@ export class NewSessionModal extends Modal {
           .onChange((x) => (v.initialPrompt = x));
         ta.inputEl.rows = 5;
       });
+      // A standard task remembers the choice: the note is the one open when it starts
       const note = this.plugin.app.workspace.getActiveFile();
-      if (note) {
+      if (note || this.opts.presetForm) {
         new Setting(el)
           .setName(t("modal.withNote"))
-          .setDesc(note.path)
+          .setDesc(this.opts.presetForm ? t("preset.withNoteDesc") : note.path)
           .addToggle((tg) => tg.setValue(v.withNote).onChange((x) => (v.withNote = x)));
       }
     }
-    new Setting(el)
+    const buttons = new Setting(el);
+    if (this.opts.onSavePreset) {
+      buttons.addButton((b) =>
+        b.setButtonText(t("preset.save")).onClick(() => {
+          if (!presetLabel(v)) return new Notice(t("preset.needName"));
+          this.close();
+          this.opts.onSavePreset({ ...v });
+        }),
+      );
+    }
+    buttons
       .addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()))
       .addButton((b) =>
         b
           .setButtonText(this.opts.submitText || t("modal.start"))
           .setCta()
           .onClick(() => {
+            if (this.opts.presetForm && !presetLabel(v)) return new Notice(t("preset.needName"));
             const out = { ...v };
-            if (v.withNote) {
+            if (v.withNote && !this.opts.presetForm) {
               const f = this.plugin.app.workspace.getActiveFile();
               if (f) out.notePath = f.path;
             }
@@ -149,6 +164,74 @@ export class NewSessionModal extends Modal {
             this.opts.onSubmit?.(out);
           }),
       );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/** Standard tasks: reorder, edit, delete, add. */
+export class PresetsModal extends Modal {
+  constructor(plugin) {
+    super(plugin.app);
+    this.plugin = plugin;
+  }
+
+  onOpen() {
+    this.titleEl.setText(t("preset.manageTitle"));
+    this.contentEl.addClass("sidecar-agent-modal");
+    this.render();
+  }
+
+  async change() {
+    await this.plugin.saveSettings();
+    this.render();
+  }
+
+  render() {
+    const el = this.contentEl;
+    el.empty();
+    const list = this.plugin.settings.presets;
+    if (!list.length) el.createDiv({ cls: "sa-empty-hint", text: t("preset.empty") });
+    list.forEach((p, i) => {
+      const model = p.model === "newest-flash" ? t("set.agyModelFlash") : p.model || t("common.default");
+      const move = (d) => {
+        list.splice(i + d, 0, ...list.splice(i, 1));
+        this.change();
+      };
+      new Setting(el)
+        .setName(presetLabel(p))
+        .setDesc(`${AGENTS[p.agent]?.label || p.agent} · ${model}`)
+        .addExtraButton((b) => b.setIcon("arrow-up").setTooltip(t("preset.up")).setDisabled(i === 0).onClick(() => move(-1)))
+        .addExtraButton((b) => b.setIcon("arrow-down").setTooltip(t("preset.down")).setDisabled(i === list.length - 1).onClick(() => move(1)))
+        .addExtraButton((b) => b.setIcon("pencil").setTooltip(t("preset.edit")).onClick(() => this.edit(i)))
+        .addExtraButton((b) =>
+          b.setIcon("trash").setTooltip(t("preset.delete")).onClick(() => {
+            list.splice(i, 1);
+            this.change();
+          }),
+        );
+    });
+    new Setting(el).addButton((b) => b.setButtonText(t("preset.new")).setCta().onClick(() => this.edit(-1)));
+  }
+
+  /** index -1 adds a new task. */
+  edit(index) {
+    const list = this.plugin.settings.presets;
+    new NewSessionModal(this.plugin, {
+      ...(list[index] || {}),
+      title: t(index < 0 ? "preset.new" : "preset.edit"),
+      submitText: t("common.save"),
+      presetForm: true,
+      allowNewestFlash: true,
+      onSubmit: (v) => {
+        const p = { name: v.name, agent: v.agent, model: v.model, effort: v.effort, initialPrompt: v.initialPrompt, withNote: v.withNote };
+        if (index < 0) list.push(p);
+        else list[index] = p;
+        this.change();
+      },
+    }).open();
   }
 
   onClose() {
