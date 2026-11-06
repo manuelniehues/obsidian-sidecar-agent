@@ -11,16 +11,6 @@ export const VIEW_PANEL = "sidecar-agent-panel";
 const FILTERS = ["all", "open", "note", "claude", "agy"];
 const PAGE = 150;
 
-function iconBtn(parent, icon, label, onClick, cls = "") {
-  const b = parent.createEl("button", { cls: `sa-icon-btn clickable-icon ${cls}`, attr: { "aria-label": label } });
-  setIcon(b, icon);
-  b.onclick = (ev) => {
-    ev.stopPropagation();
-    onClick(ev);
-  };
-  return b;
-}
-
 export class AgentPanelView extends ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -77,7 +67,6 @@ export class AgentPanelView extends ItemView {
     this.topEl = root.createDiv({ cls: "sa-top" });
     this.barsEl = root.createDiv({ cls: "sa-bars" });
     const bar = this.barsEl.createDiv({ cls: "sa-toolbar" });
-    this.collapseBtn = iconBtn(bar, lay.topCollapsed ? "chevron-up" : "chevron-down", t("panel.toggleList"), () => this.toggleTop());
     const mk = (icon, text, label, fn, cls = "") => {
       const b = bar.createEl("button", { cls: `sa-btn ${cls}`, attr: { "aria-label": label } });
       setIcon(b.createSpan({ cls: "sa-btn-icon" }), icon);
@@ -85,10 +74,11 @@ export class AgentPanelView extends ItemView {
       b.onclick = fn;
       return b;
     };
+    this.collapseBtn = mk(lay.topCollapsed ? "chevron-up" : "chevron-down", t("panel.listShort"), t("panel.toggleList"), () => this.toggleTop());
     mk(AGENTS.claude.icon, "Claude", t("cmd.newClaude"), () => this.plugin.startNew({ agent: "claude" }), "mod-cta sa-claude");
     mk(AGENTS.agy.icon, "Antigravity", t("cmd.newAgy"), () => this.plugin.startNew({ agent: "agy" }), "mod-cta sa-agy");
-    iconBtn(bar, "sliders-horizontal", t("panel.newWithOptions"), (ev) => this.plugin.presetMenu(ev));
-    iconBtn(bar, "refresh-cw", t("panel.reload"), () => this.plugin.store.refresh());
+    mk("sliders-horizontal", t("panel.tasksShort"), t("panel.newWithOptions"), (ev) => this.plugin.presetMenu(ev));
+    mk("refresh-cw", t("panel.reloadShort"), t("panel.reload"), () => this.plugin.store.refresh());
 
     const search = this.barsEl.createDiv({ cls: "sa-search" });
     this.searchInput = search.createEl("input", { type: "search", placeholder: t("panel.searchPlaceholder") });
@@ -209,7 +199,7 @@ export class AgentPanelView extends ItemView {
     this.listWrap.toggle(!lay.topCollapsed);
     this.split1.toggle(!lay.topCollapsed);
     this.topEl.setCssStyles({ height: lay.topCollapsed ? "auto" : `${lay.top}px` });
-    setIcon(this.collapseBtn, lay.topCollapsed ? "chevron-up" : "chevron-down");
+    setIcon(this.collapseBtn.querySelector(".sa-btn-icon"), lay.topCollapsed ? "chevron-up" : "chevron-down");
     this.active?.scheduleFit();
   }
 
@@ -757,11 +747,12 @@ export class AgentPanelView extends ItemView {
     title.setAttr("title", [name, e.firstPrompt].filter(Boolean).join("\n\n"));
     const meta = [relTime(e.updated || e.created)];
     if (e.model) meta.push(e.model.replace(/^claude-/, ""));
-    if (e.messages) meta.push(this.countLabel(e.agent, e.messages));
+    if (e.messages) meta.push(this.countLabel(e.archived ? "claude" : e.agent, e.messages));
     const m = body.createDiv({ cls: "sa-meta" });
     if (isOpen) m.createSpan({ cls: "sa-badge is-open", text: t("badge.open") });
+    if (e.archived) m.createSpan({ cls: "sa-badge", text: t("badge.archive") });
     m.appendText(meta.filter(Boolean).join(" · "));
-    row.onclick = () => this.plugin.resume(e);
+    row.onclick = () => (e.archived ? this.plugin.openChatNote(e.path) : this.plugin.resume(e));
     row.oncontextmenu = (ev) => {
       ev.preventDefault();
       this.entryMenu(e).showAtMouseEvent(ev);
@@ -771,6 +762,28 @@ export class AgentPanelView extends ItemView {
   entryMenu(e) {
     const p = this.plugin;
     const menu = new Menu();
+    const note = e.archived ? e.path : p.store.noteOf.get(e.key);
+    const noteItems = () => {
+      if (!note) return;
+      menu.addItem((i) =>
+        i
+          .setTitle(t("menu.openChatNote"))
+          .setIcon("file-text")
+          .onClick(() => p.openChatNote(note)),
+      );
+      for (const agent of ["claude", "agy"]) {
+        menu.addItem((i) =>
+          i
+            .setTitle(t("menu.continueWith", { agent: AGENTS[agent].label }))
+            .setIcon(AGENTS[agent].icon)
+            .onClick(() => p.continueChat(note, agent)),
+        );
+      }
+    };
+    if (e.archived) {
+      noteItems();
+      return menu;
+    }
     menu.addItem((i) =>
       i
         .setTitle(t("menu.resume"))
@@ -803,6 +816,8 @@ export class AgentPanelView extends ItemView {
         .setIcon("copy")
         .onClick(() => navigator.clipboard.writeText(e.id)),
     );
+    if (note) menu.addSeparator();
+    noteItems();
     return menu;
   }
 }

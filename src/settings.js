@@ -49,6 +49,9 @@ export const DEFAULT_SETTINGS = {
   agyModelsCache: null,
   showWhatsNew: true, // changelog once after an update
   lastSeenVersion: "",
+  archiveEnabled: false, // readable copy of every chat as a note in the vault
+  archiveFolder: "Agent chats",
+  archiveFrom: "", // YYYY-MM-DD: sessions last changed before that day get no note
   claudeVoice: true, // Claude sessions: microphone button uses Claude's own dictation
   dictationKey: "", // only used when Obsidian has no secret storage (before 1.11.4)
   dictationModel: "", // "" = newest Flash model of the key
@@ -401,6 +404,39 @@ export class SidecarSettingTab extends PluginSettingTab {
     const noteSize = parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16;
     sliderSetting(t("set.fontSize"), "readerFontSize", 10, 26, 0.5, noteSize, t("set.fontSizeDesc"));
     sliderSetting(t("set.lineHeight"), "readerLineHeight", 1, 2, 0.05, 1.5, t("set.lineHeightDesc"));
+
+    // ---------------------------------------------------------------- chat history
+    new Setting(el).setName(t("set.archiveHeading")).setHeading();
+    new Setting(el)
+      .setName(t("set.archive"))
+      .setDesc(t("set.archiveDesc"))
+      .addToggle((tg) =>
+        tg.setValue(s.archiveEnabled).onChange(async (v) => {
+          s.archiveEnabled = v;
+          await p.saveSettings();
+          p.store.rebuild();
+          if (v) p.archive.run();
+        }),
+      );
+    new Setting(el)
+      .setName(t("set.archiveFolder"))
+      .setDesc(t("set.archiveFolderDesc"))
+      .addText((tx) =>
+        tx.setPlaceholder("Agent chats").setValue(s.archiveFolder).onChange(async (v) => {
+          s.archiveFolder = v.trim();
+          await p.saveSettings();
+          p.store.rebuild();
+        }),
+      );
+    new Setting(el)
+      .setName(t("set.archiveFrom"))
+      .setDesc(t("set.archiveFromDesc"))
+      .addText((tx) =>
+        tx.setPlaceholder("2026-01-31").setValue(s.archiveFrom).onChange(async (v) => {
+          s.archiveFrom = /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "";
+          await p.saveSettings();
+        }),
+      );
 
     // ---------------------------------------------------------------- terminal
     new Setting(el).setName(t("set.terminalHeading")).setHeading();

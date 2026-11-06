@@ -398,7 +398,11 @@ body.sa-resizing.sa-resizing * {
 .sidecar-agent-panel .sa-bars .sa-search {
   padding: 0;
 }
-/* Both button rows: equal cells, so their columns line up */
+/* Both button rows: equal cells, so their columns line up; a narrow panel wraps them */
+.sidecar-agent-panel .sa-actions,
+.sidecar-agent-panel .sa-bars .sa-toolbar {
+  flex-wrap: wrap;
+}
 .sidecar-agent-panel .sa-actions > *,
 .sidecar-agent-panel .sa-bars .sa-toolbar > * {
   flex: 1 1 0;

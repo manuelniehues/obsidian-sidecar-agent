@@ -7,6 +7,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { SessionStore } from "./store";
+import { ChatArchive } from "./archive";
 import { ingestSchedule, newScheduleState, pendingSchedules } from "./schedule";
 import STATUSLINE_PY from "./py/statusline.py";
 import CONTEXT_HOOK_PY from "./py/context_hook.py";
@@ -41,6 +42,7 @@ export default class SidecarAgentPlugin extends Plugin {
     this.ctxFile = path.join(CACHE_DIR, `context-${vaultHash(this.vaultPath)}.json`);
     this.terminals = new Set();
     this.activeTerminal = null;
+    this.archive = new ChatArchive(this);
     this.store = new SessionStore(this);
     this.dictation = new Dictation(this);
 
@@ -53,6 +55,11 @@ export default class SidecarAgentPlugin extends Plugin {
     this.addCommand({ id: "focus-terminal", name: t("cmd.focusTerminal"), callback: async () => (await this.activatePanel(true))?.focusInput() });
     this.addCommand({ id: "new-claude", name: t("cmd.newClaude"), callback: () => this.startNew({ agent: "claude" }) });
     this.addCommand({ id: "new-agy", name: t("cmd.newAgy"), callback: () => this.startNew({ agent: "agy" }) });
+    this.addCommand({ id: "write-chat-notes", name: t("cmd.archiveNow"), checkCallback: (checking) => {
+      if (!this.archive.enabled) return false;
+      if (!checking) this.archive.run({ report: true });
+      return true;
+    } });
     this.addCommand({ id: "new-with-options", name: t("cmd.newOptions"), callback: () => this.openNewSessionModal({}) });
     this.addCommand({
       id: "send-note",
@@ -159,6 +166,7 @@ export default class SidecarAgentPlugin extends Plugin {
       // Read limits right away and shortly after start (not only on the first 30 s tick)
       this.tickLimits();
       window.setTimeout(() => this.tickLimits(), 5000);
+      this.archive.start();
       this.store.startWatching();
       this.store.refresh();
       // After a plugin reload Obsidian restores the existing panel a moment later; only create one if none comes back.
@@ -207,6 +215,7 @@ export default class SidecarAgentPlugin extends Plugin {
   }
 
   onunload() {
+    this.archive?.stop();
     this.dictation?.cancel();
     for (const v of this.terminals || []) {
       v.kill();
@@ -739,6 +748,7 @@ export default class SidecarAgentPlugin extends Plugin {
         this.notify(s, next, msg);
       }
     }
+    if (next === "done") this.archive.turnEnded(s);
     if (this.reloadPending) this.checkReload();
     this.trigger("terminals-changed");
   }
@@ -1304,6 +1314,16 @@ export default class SidecarAgentPlugin extends Plugin {
     else delete this.settings.aliases[key];
     await this.saveSettings();
     this.store.trigger("changed");
+  }
+
+  /** Show the chat note of a list entry in the main area. */
+  openChatNote(p) {
+    this.app.workspace.openLinkText(p, "", false);
+  }
+
+  /** New session that picks up a chat from its note: works across devices and across agents. */
+  continueChat(p, agent) {
+    return this.startNew({ agent, initialPrompt: t("prompt.continueChat"), notePath: p });
   }
 
   renameEntry(e) {

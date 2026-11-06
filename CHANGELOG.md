@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.0
+
+- Chat history in the vault (optional, off by default): after each answer, Sidecar Agent can keep a readable copy of the chat as a note in a vault folder, for Claude and Antigravity alike. A vault sync such as Obsidian Sync carries the notes to your other devices. Turn it on under Settings → Chat history in the vault, where you also pick the folder and an optional start date. Notes hold your messages, the answers and a folded line per tool call, not the tool results, so they stay small. Chats can contain sensitive content, and this puts them in your vault, its sync and its backups.
+- Chats from other devices appear in the session list with the label "history". A click opens the note, the search finds its text.
+- Continue with Claude or Continue with Antigravity (right-click on a chat): starts a new session that reads the note first. This is no real resume, the tool results are missing, but it works across devices and even across the two agents.
+- The three icon-only buttons in the bottom row now have labels: Session list, Tasks and Reload.
+
 ## 1.11.0
 
 - Standard tasks: save a recurring job with **Save as standard task** in the new-session dialog (agent, model, effort, first message, current note yes or no). The sliders button then opens a list of your tasks, and one click starts the session. Sort, edit and delete under **Edit standard tasks…** in that list. For Antigravity you can pick "Newest Flash model", so a saved task follows new models.

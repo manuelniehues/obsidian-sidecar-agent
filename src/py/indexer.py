@@ -377,6 +377,23 @@ def rg_files(rg, query, directory, glob):
     return hits
 
 
+def search_notes(directory, query):
+    """chat_id of the chat notes in the folder that contain the query."""
+    q = query.casefold()
+    hits = []
+    for root, dirs, files in os.walk(directory or ""):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for name in files:
+            if not name.endswith(".md"):
+                continue
+            with open(os.path.join(root, name), encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            m = re.search(r"^chat_id:\s*(\S+)\s*$", text[:1500], re.M)
+            if m and q in text.casefold():
+                hits.append(m.group(1))
+    return hits
+
+
 def cmd_search(a):
     q = a["query"]
     claude = [n[:-6] for n in rg_files(a.get("rg"), q, a.get("claudeDir"), "*.jsonl")]
@@ -397,7 +414,7 @@ def cmd_search(a):
             agy = sorted({r[0] for r in rows})
         finally:
             con.close()
-    json.dump({"claude": claude, "agy": agy}, sys.stdout)
+    json.dump({"claude": claude, "agy": agy, "archive": search_notes(a.get("archiveDir"), q)}, sys.stdout)
 
 
 def main():

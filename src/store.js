@@ -12,7 +12,9 @@ export class SessionStore extends Events {
   constructor(plugin) {
     super();
     this.plugin = plugin;
-    this.sessions = [];
+    this.sessions = []; // what the list shows: this device's sessions plus chat notes of other devices
+    this.local = []; // only this device's sessions
+    this.noteOf = new Map(); // session key -> chat note in the vault
     this.byKey = new Map();
     this.loaded = false;
     this.refreshing = null;
@@ -36,10 +38,10 @@ export class SessionStore extends Events {
     };
   }
 
-  async python(args) {
+  async python(args, script = INDEXER) {
     const py = this.plugin.pythonPath();
     if (!py) throw new Error(t("err.noPython"));
-    const { stdout } = await run(py, ["-I", "-B", "-c", INDEXER, JSON.stringify(args)], { cwd: os.tmpdir() });
+    const { stdout } = await run(py, ["-I", "-B", "-c", script, JSON.stringify(args)], { cwd: os.tmpdir() });
     return JSON.parse(stdout);
   }
 
@@ -54,6 +56,7 @@ export class SessionStore extends Events {
         const raw = await this.python({ mode: "index", ...this.paths, agyIds: this.agyIds() });
         this.merge(raw);
         this.loaded = true;
+        this.plugin.archive.dirty = true;
         this.trigger("changed");
       } catch (e) {
         console.error("[sidecar-agent] index failed", e, e.stderr);
@@ -102,9 +105,22 @@ export class SessionStore extends Events {
         files: a.files || [],
       });
     }
-    out.sort((a, b) => (b.updated || 0) - (a.updated || 0));
-    this.sessions = out;
-    this.byKey = new Map(out.map((e) => [e.key, e]));
+    this.local = out;
+    this.combine();
+  }
+
+  combine() {
+    const { list, noteOf } = this.plugin.archive.entries(new Set(this.local.map((e) => e.key)));
+    this.noteOf = noteOf;
+    this.sessions = [...this.local, ...list].sort((a, b) => (b.updated || 0) - (a.updated || 0));
+    this.byKey = new Map(this.sessions.map((e) => [e.key, e]));
+  }
+
+  /** The chat notes changed: update the list without reading the session files. */
+  rebuild() {
+    if (!this.loaded) return;
+    this.combine();
+    this.trigger("changed");
   }
 
   find(agent, id) {
@@ -135,10 +151,12 @@ export class SessionStore extends Events {
 
   /** Full-text search across all session files (ripgrep or the Antigravity FTS index). */
   async fulltext(q) {
-    const res = await this.python({ mode: "search", query: q, rg: this.plugin.rgPath(), ...this.paths });
+    const archive = this.plugin.archive;
+    const res = await this.python({ mode: "search", query: q, rg: this.plugin.rgPath(), archiveDir: archive.enabled ? archive.folderAbs : "", ...this.paths });
     const keys = new Set();
     for (const id of res.claude || []) keys.add(`claude:${id}`);
     for (const id of res.agy || []) keys.add(`agy:${id}`);
+    for (const id of res.archive || []) keys.add(`note:${id}`);
     return keys;
   }
 
