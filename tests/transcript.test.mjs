@@ -230,3 +230,20 @@ test("background jobs: Bash in the background, moved after timeout, subagents, n
   tail.feed(JSON.stringify({ type: "assistant", isSidechain: true, message: { content: [{ type: "tool_use", id: "x2", name: "Bash", input: { command: "ls" } }] } }));
   assert.deepEqual(tail.state(), { steps: 2, last: "Bash: Ordner auflisten" });
 });
+
+test("wait estimate of background commands: sleep, polling loops, timeout", async () => {
+  const { waitEstimate, BackgroundTracker } = await import("../src/transcript.js");
+  assert.deepEqual(waitEstimate("sleep 600"), { seconds: 600, exact: true });
+  assert.deepEqual(waitEstimate("sleep 600; ssh oracle1 'grep x log'"), { seconds: 600, exact: true });
+  assert.deepEqual(waitEstimate("sleep 10m && echo ok"), { seconds: 600, exact: true });
+  assert.deepEqual(waitEstimate("for i in $(seq 1 90); do if ssh h 'grep -q done log'; then break; fi; sleep 20; done"), { seconds: 1800, exact: false, every: 20 });
+  assert.deepEqual(waitEstimate("for i in $(seq 30); do sleep 5; sleep 5; done"), { seconds: 300, exact: false, every: 10 });
+  assert.deepEqual(waitEstimate("until curl -s localhost:8080; do sleep 3; done"), { every: 3 });
+  assert.deepEqual(waitEstimate("timeout 120 tail -f log"), { seconds: 120, exact: false });
+  assert.equal(waitEstimate("npm run build"), null);
+  assert.equal(waitEstimate("make && sleep 5"), null);
+  const tr = new BackgroundTracker();
+  tr.feed(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "b", name: "Bash", input: { command: "sleep 600", run_in_background: true } }] } }));
+  tr.feed(JSON.stringify({ type: "user", toolUseResult: { backgroundTaskId: "w1" }, message: { content: [{ type: "tool_result", tool_use_id: "b", content: "Command running in background with ID: w1." }] } }));
+  assert.deepEqual(tr.jobs()[0].wait, { seconds: 600, exact: true });
+});

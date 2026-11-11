@@ -828,10 +828,11 @@ body.sa-resizing.sa-resizing * {
   border-bottom: 1px solid var(--background-modifier-border);
   white-space: nowrap;
   overflow: hidden;
-  --sa-progress-color: var(--interactive-accent);
+  /* muted like the context and limit bars in the info row below */
+  --sa-progress-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
 }
 .sidecar-agent-panel .sa-progress.sa-agy {
-  --sa-progress-color: var(--sa-agy-color);
+  --sa-progress-color: color-mix(in srgb, var(--sa-agy-color) 45%, var(--background-modifier-border));
 }
 .sidecar-agent-panel .sa-progress-icon {
   display: inline-flex;
@@ -843,10 +844,10 @@ body.sa-resizing.sa-resizing * {
 }
 .sidecar-agent-panel .sa-progress-bar {
   position: relative;
-  flex: 0 1 140px;
-  min-width: 50px;
-  height: 5px;
-  border-radius: 3px;
+  flex: 0 1 80px;
+  min-width: 36px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--background-modifier-border);
   overflow: hidden;
 }
@@ -859,7 +860,7 @@ body.sa-resizing.sa-resizing * {
 }
 .sidecar-agent-panel .sa-progress-count {
   font-variant-numeric: tabular-nums;
-  color: var(--text-normal);
+  color: var(--text-muted);
 }
 .sidecar-agent-panel .sa-progress-step {
   flex: 1 1 auto;
@@ -907,6 +908,13 @@ body.sa-resizing.sa-resizing * {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.sidecar-agent-panel .sa-progress-next {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
 }
 .sidecar-agent-panel .sa-progress-job-steps,
 .sidecar-agent-panel .sa-progress-job-time,

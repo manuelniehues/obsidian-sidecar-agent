@@ -321,6 +321,29 @@ export function toolLabel(name, input) {
 }
 
 /**
+ * How long a background command waits before Claude hears from it again, read from the command itself:
+ *   {seconds, exact: true}   a plain "sleep N" (optionally followed by the check): due after N seconds
+ *   {seconds, exact: false}  a loop "for … in $(seq a b)" with sleeps inside, or "timeout N": at the latest after that
+ *   {every}                  a while/until loop with sleeps: checks every N seconds, no end known
+ * null when the command does not wait in a recognisable way.
+ */
+export function waitEstimate(command) {
+  const c = String(command || "");
+  const sleeps = [...c.matchAll(/\bsleep\s+(\d+(?:\.\d+)?)(m)?\b/g)].reduce((a, m) => a + Number(m[1]) * (m[2] ? 60 : 1), 0);
+  const tmo = c.match(/^\s*timeout\s+(\d+)\b/);
+  const seq = c.match(/\bfor\s+\w+\s+in\s+\$\(seq\s+(\d+)(?:\s+(\d+))?\)/);
+  if (seq && sleeps) {
+    const n = seq[2] ? Number(seq[2]) - Number(seq[1]) + 1 : Number(seq[1]);
+    return { seconds: Math.max(1, n) * sleeps, exact: false, every: sleeps };
+  }
+  if (tmo) return { seconds: Number(tmo[1]), exact: false };
+  if (/\b(?:while|until)\b/.test(c) && sleeps) return { every: sleeps };
+  const m = c.match(/^\s*sleep\s+(\d+(?:\.\d+)?)(m)?\s*(?:$|;|&&|\n)/);
+  if (m && !/\b(?:for|while|until)\b/.test(c)) return { seconds: sleeps, exact: true };
+  return null;
+}
+
+/**
  * Follows the background work a Claude session started (session file, main conversation only):
  *   bash   Bash with run_in_background, or a command Claude moved to the background after its timeout
  *   agent  Agent / Task subagents, foreground (until their result) and background (until their task-notification)
@@ -394,7 +417,8 @@ export class BackgroundTracker {
     const id = r?.backgroundTaskId || (use.name !== "Bash" && typeof r?.taskId === "string" ? r.taskId : null) || m?.[1] || m?.[2] || m?.[3];
     if (!id) return false;
     const kind = use.name === "Bash" ? "bash" : use.name === "Monitor" ? "monitor" : "other";
-    this.list.set(String(id), { key: String(id), kind, label: toolLabel(use.name, use.input) || use.name, startedAt: use.at || at, taskId: String(id) });
+    const wait = use.name === "Bash" || use.name === "PowerShell" ? waitEstimate(use.input?.command) : null;
+    this.list.set(String(id), { key: String(id), kind, label: toolLabel(use.name, use.input) || use.name, startedAt: use.at || at, taskId: String(id), wait });
     return true;
   }
 

@@ -353,12 +353,14 @@ export class AgentPanelView extends ItemView {
     el.empty();
     this.elapsedEl = null;
     this.jobTimeEls = [];
+    this.nextEl = null;
     const s = this.active;
     const working = s?.running && (s.agentState === "busy" || s.agentState === "waiting");
     const p = s?.running ? this.plugin.taskProgress(s) : null;
     const jobs = s?.running && working ? this.plugin.backgroundJobs(s) : [];
+    const next = s?.running ? this.nextCheck(s, jobs) : null;
     const open = p && p.done < p.total;
-    if (!s || (!working && !open)) {
+    if (!s || (!working && !open && !next)) {
       el.hide();
       return;
     }
@@ -374,18 +376,45 @@ export class AgentPanelView extends ItemView {
       if (p.current) el.createSpan({ cls: "sa-progress-step", text: p.current });
       const mark = { completed: "✓", in_progress: "▶", pending: "○" };
       tip.push(...p.tasks.map((x) => `${mark[x.status] || "○"} ${x.subject}`));
-    } else if (!jobs.length) {
+    } else if (!jobs.length && working) {
       el.createSpan({ cls: "sa-progress-step is-muted", text: s.agentState === "waiting" ? t("agentState.waiting") : t("agentState.busy") });
       tip.push(t("progress.noList"));
     }
-    if (jobs.length) this.renderJobs(el, jobs, tip);
+    // With a task list its current step already says what is going on: the chips then only show icon and time
+    if (jobs.length) this.renderJobs(el, jobs, tip, !!p?.current);
+    if (next) {
+      const box = el.createSpan({ cls: "sa-progress-next" });
+      setIcon(box.createSpan({ cls: "sa-progress-job-icon" }), "alarm-clock");
+      box.createSpan({ text: t(next.exact ? "progress.next" : "progress.nextLatest", { time: hhmm(next.at) }) });
+      this.nextEl = { el: box.createSpan({ cls: "sa-progress-job-time" }), at: next.at };
+      if (tip.length) tip.push("");
+      tip.push(t(next.exact ? "progress.nextTip" : "progress.nextLatestTip", { time: hhmm(next.at), what: next.what }));
+    }
     el.setAttr("aria-label", tip.join("\n"));
     if (working && s.turnStartedAt) this.elapsedEl = el.createSpan({ cls: "sa-progress-time" });
     this.tickElapsed();
   }
 
+  /**
+   * When Claude will next report back on its own: a scheduled wakeup or cron run, or the end of a background
+   * command that only waits ("sleep 600", a polling loop with a known number of rounds). Soonest first.
+   */
+  nextCheck(s, jobs) {
+    const now = Date.now();
+    const cands = [];
+    if (s.st.agent === "claude") {
+      for (const x of this.plugin.schedulesFor(s)) {
+        if (x.at > now && x.at - now < 6 * 3600000) cands.push({ at: x.at, exact: x.kind === "wakeup", what: x.text || t("progress.wakeup") });
+      }
+    }
+    for (const j of jobs) {
+      if (j.wait?.seconds) cands.push({ at: j.startedAt + j.wait.seconds * 1000, exact: j.wait.exact, what: j.label });
+    }
+    return cands.filter((c) => c.at > now - 5000).sort((a, b) => a.at - b.at)[0] || null;
+  }
+
   /** Running background commands and subagents: up to two chips in the line, all of them in the tooltip. */
-  renderJobs(el, jobs, tip) {
+  renderJobs(el, jobs, tip, compact) {
     const icon = { bash: "terminal", agent: "bot", monitor: "eye", other: "hourglass" };
     const kind = { bash: t("progress.kind.bash"), agent: t("progress.kind.agent"), monitor: t("progress.kind.monitor"), other: t("progress.kind.other") };
     const box = el.createSpan({ cls: "sa-progress-jobs" });
@@ -393,20 +422,24 @@ export class AgentPanelView extends ItemView {
     for (const j of shown) {
       const chip = box.createSpan({ cls: "sa-progress-job" });
       setIcon(chip.createSpan({ cls: "sa-progress-job-icon" }), icon[j.kind] || icon.other);
-      chip.createSpan({ cls: "sa-progress-job-label", text: j.label || kind[j.kind] || kind.other });
-      if (j.steps) chip.createSpan({ cls: "sa-progress-job-steps", text: `· ${j.steps}` });
+      if (!compact) chip.createSpan({ cls: "sa-progress-job-label", text: j.label || kind[j.kind] || kind.other });
+      if (j.steps) chip.createSpan({ cls: "sa-progress-job-steps", text: compact ? String(j.steps) : `· ${j.steps}` });
       this.jobTimeEls.push({ el: chip.createSpan({ cls: "sa-progress-job-time" }), at: j.startedAt });
     }
     if (jobs.length > shown.length) box.createSpan({ cls: "sa-progress-job-more", text: t("progress.more", { n: jobs.length - shown.length }) });
     if (tip.length) tip.push("");
     tip.push(t("progress.bgTitle"));
     for (const j of jobs) {
-      const extra = [j.steps ? t("progress.steps", { n: j.steps }) : "", j.last ? t("progress.lastTool", { tool: j.last }) : ""].filter(Boolean).join(", ");
+      const extra = [
+        j.steps ? t("progress.steps", { n: j.steps }) : "",
+        j.last ? t("progress.lastTool", { tool: j.last }) : "",
+        j.wait?.every ? t("progress.every", { n: j.wait.every }) : "",
+      ].filter(Boolean).join(", ");
       tip.push(`• ${kind[j.kind] || kind.other}: ${j.label}${extra ? ` (${extra})` : ""}`);
     }
   }
 
-  /** Every second: time since the turn started and since each background job started (only the text, no re-render). */
+  /** Every second: elapsed times, the countdown to the next report (only the text, no re-render). */
   tickElapsed() {
     const fmt = (ms) => {
       const sec = Math.max(0, Math.floor(ms / 1000));
@@ -416,6 +449,10 @@ export class AgentPanelView extends ItemView {
       return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
     };
     for (const j of this.jobTimeEls || []) if (j.at) j.el.setText(fmt(Date.now() - j.at));
+    if (this.nextEl) {
+      const left = this.nextEl.at - Date.now();
+      this.nextEl.el.setText(left > 0 ? t("progress.left", { left: fmt(left) }) : t("progress.due"));
+    }
     const s = this.active;
     if (!this.elapsedEl || !s?.turnStartedAt) return;
     this.elapsedEl.setText(fmt(Date.now() - s.turnStartedAt));

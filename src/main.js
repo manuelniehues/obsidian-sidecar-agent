@@ -365,24 +365,27 @@ export default class SidecarAgentPlugin extends Plugin {
 
   // ---------------------------------------------------------------- Claude color scheme
   /**
-   * Writes ~/.claude/themes/sidecar-agent.json: base dark-ansi/light-ansi (= the plugin's muted palette),
-   * accent tokens in the Obsidian accent color. Returns "custom:sidecar-agent" (or null on error).
+   * Writes ~/.claude/themes/sidecar-agent-<vault hash>.json: base dark-ansi/light-ansi (= the plugin's muted palette),
+   * accent tokens in the Obsidian accent color. Returns "custom:sidecar-agent-<hash>" (or null on error).
    */
   writeClaudeTheme() {
     if (this.settings.claudeTheme !== "ansi") return null;
     try {
       const accent = obsidianAccent();
+      // One file per vault: vaults with different accent colors would otherwise overwrite each other's scheme
+      const name = `${THEME_NAME}-${vaultHash(this.vaultPath)}`;
       const theme = {
-        name: "Obsidian (Sidecar Agent)",
+        name: `Obsidian ${this.app.vault.getName()} (Sidecar Agent)`,
         base: isDarkTheme() ? "dark-ansi" : "light-ansi",
         overrides: { claude: accent, claudeShimmer: accent, suggestion: accent, permission: accent },
       };
       const dir = path.join(os.homedir(), ".claude", "themes");
       fs.mkdirSync(dir, { recursive: true });
-      const file = path.join(dir, `${THEME_NAME}.json`);
+      const file = path.join(dir, `${name}.json`);
       const json = JSON.stringify(theme, null, 2) + "\n";
       if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== json) fs.writeFileSync(file, json);
-      return `custom:${THEME_NAME}`;
+      fs.rmSync(path.join(dir, `${THEME_NAME}.json`), { force: true }); // shared file of 1.13.0 and older
+      return `custom:${name}`;
     } catch (e) {
       console.warn("[sidecar-agent] color scheme", e);
       return null;
@@ -578,7 +581,7 @@ export default class SidecarAgentPlugin extends Plugin {
     if (!t) return [];
     return t.bg.jobs().map((j) => {
       const sub = j.kind === "agent" ? t.subs.get(j.key) : null;
-      return { kind: j.kind, label: j.label, startedAt: j.startedAt, ...(sub ? sub.tail.state() : {}) };
+      return { kind: j.kind, label: j.label, startedAt: j.startedAt, wait: j.wait || null, ...(sub ? sub.tail.state() : {}) };
     });
   }
 

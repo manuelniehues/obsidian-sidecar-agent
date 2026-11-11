@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.0
+
+- The progress row now tells you when Claude will report back on its own: "next report 17:55 · in 8:12". It counts down to a scheduled wakeup or cron run, or to the end of a background command that only waits (for example `sleep 600` before a check, or a polling loop with a fixed number of rounds, shown as "by 17:55" because it can end earlier).
+- When a task list is shown, the background chips only show their icon and time; the full description is in the tooltip. This avoids the same text appearing twice.
+- The progress bar uses the same muted color and size as the context and limit bars below.
+- Fixed: Claude's text could turn into Obsidian's default purple when a second vault with another accent color was open. Each vault now writes its own color scheme for Claude.
+
 ## 1.13.0
 
 - The progress row under the tabs now shows what Claude is waiting for: commands running in the background and subagents appear as small chips with their own running time. A subagent chip also counts the steps it has taken so far, and the tooltip names its last tool call. Up to two chips are shown, more as "+n". They disappear when the command or subagent ends.
