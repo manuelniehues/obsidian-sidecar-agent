@@ -352,9 +352,11 @@ export class AgentPanelView extends ItemView {
     if (!el) return;
     el.empty();
     this.elapsedEl = null;
+    this.jobTimeEls = [];
     const s = this.active;
     const working = s?.running && (s.agentState === "busy" || s.agentState === "waiting");
     const p = s?.running ? this.plugin.taskProgress(s) : null;
+    const jobs = s?.running && working ? this.plugin.backgroundJobs(s) : [];
     const open = p && p.done < p.total;
     if (!s || (!working && !open)) {
       el.hide();
@@ -363,6 +365,7 @@ export class AgentPanelView extends ItemView {
     el.show();
     el.toggleClass("sa-agy", s.st.agent === "agy");
     setIcon(el.createSpan({ cls: "sa-progress-icon" }), p ? "list-checks" : "timer");
+    const tip = [];
     if (p) {
       const pct = Math.round((p.done / p.total) * 100);
       const bar = el.createSpan({ cls: "sa-progress-bar" });
@@ -370,24 +373,52 @@ export class AgentPanelView extends ItemView {
       el.createSpan({ cls: "sa-progress-count", text: `${p.done}/${p.total}` });
       if (p.current) el.createSpan({ cls: "sa-progress-step", text: p.current });
       const mark = { completed: "✓", in_progress: "▶", pending: "○" };
-      el.setAttr("aria-label", p.tasks.map((t) => `${mark[t.status] || "○"} ${t.subject}`).join("\n"));
-    } else {
+      tip.push(...p.tasks.map((x) => `${mark[x.status] || "○"} ${x.subject}`));
+    } else if (!jobs.length) {
       el.createSpan({ cls: "sa-progress-step is-muted", text: s.agentState === "waiting" ? t("agentState.waiting") : t("agentState.busy") });
-      el.setAttr("aria-label", t("progress.noList"));
+      tip.push(t("progress.noList"));
     }
+    if (jobs.length) this.renderJobs(el, jobs, tip);
+    el.setAttr("aria-label", tip.join("\n"));
     if (working && s.turnStartedAt) this.elapsedEl = el.createSpan({ cls: "sa-progress-time" });
     this.tickElapsed();
   }
 
-  /** Every second: time since the turn started (only the text, no re-render). */
+  /** Running background commands and subagents: up to two chips in the line, all of them in the tooltip. */
+  renderJobs(el, jobs, tip) {
+    const icon = { bash: "terminal", agent: "bot", monitor: "eye", other: "hourglass" };
+    const kind = { bash: t("progress.kind.bash"), agent: t("progress.kind.agent"), monitor: t("progress.kind.monitor"), other: t("progress.kind.other") };
+    const box = el.createSpan({ cls: "sa-progress-jobs" });
+    const shown = jobs.slice(0, 2);
+    for (const j of shown) {
+      const chip = box.createSpan({ cls: "sa-progress-job" });
+      setIcon(chip.createSpan({ cls: "sa-progress-job-icon" }), icon[j.kind] || icon.other);
+      chip.createSpan({ cls: "sa-progress-job-label", text: j.label || kind[j.kind] || kind.other });
+      if (j.steps) chip.createSpan({ cls: "sa-progress-job-steps", text: `· ${j.steps}` });
+      this.jobTimeEls.push({ el: chip.createSpan({ cls: "sa-progress-job-time" }), at: j.startedAt });
+    }
+    if (jobs.length > shown.length) box.createSpan({ cls: "sa-progress-job-more", text: t("progress.more", { n: jobs.length - shown.length }) });
+    if (tip.length) tip.push("");
+    tip.push(t("progress.bgTitle"));
+    for (const j of jobs) {
+      const extra = [j.steps ? t("progress.steps", { n: j.steps }) : "", j.last ? t("progress.lastTool", { tool: j.last }) : ""].filter(Boolean).join(", ");
+      tip.push(`• ${kind[j.kind] || kind.other}: ${j.label}${extra ? ` (${extra})` : ""}`);
+    }
+  }
+
+  /** Every second: time since the turn started and since each background job started (only the text, no re-render). */
   tickElapsed() {
+    const fmt = (ms) => {
+      const sec = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const ss = String(sec % 60).padStart(2, "0");
+      return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+    };
+    for (const j of this.jobTimeEls || []) if (j.at) j.el.setText(fmt(Date.now() - j.at));
     const s = this.active;
     if (!this.elapsedEl || !s?.turnStartedAt) return;
-    const sec = Math.max(0, Math.floor((Date.now() - s.turnStartedAt) / 1000));
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const ss = String(sec % 60).padStart(2, "0");
-    this.elapsedEl.setText(h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`);
+    this.elapsedEl.setText(fmt(Date.now() - s.turnStartedAt));
   }
 
   stateLabel(s) {

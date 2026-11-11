@@ -305,3 +305,169 @@ export class TaskTracker {
     };
   }
 }
+
+// ------------------------------------------------------------------ background jobs and subagents (progress)
+
+const BG_TOOLS = new Set(["Bash", "PowerShell", "Monitor", "Workflow"]);
+const JOB_DONE = new Set(["completed", "complete", "done", "failed", "error", "killed", "cancelled", "canceled", "stopped", "exited", "finished"]);
+
+/** Short text for a tool call: its description, else a file name, pattern or the start of a command. */
+export function toolLabel(name, input) {
+  const i = input || {};
+  const base = (p) => String(p).split("/").filter(Boolean).pop() || String(p);
+  const v = i.description || (i.file_path && base(i.file_path)) || (i.path && base(i.path)) || i.pattern || i.query || i.url || i.command || i.prompt || "";
+  const s = String(v).replace(/\s+/g, " ").trim();
+  return s.length > 60 ? s.slice(0, 59) + "…" : s;
+}
+
+/**
+ * Follows the background work a Claude session started (session file, main conversation only):
+ *   bash   Bash with run_in_background, or a command Claude moved to the background after its timeout
+ *   agent  Agent / Task subagents, foreground (until their result) and background (until their task-notification)
+ *   monitor / other tools that hand back a background task id
+ * Finished by a <task-notification> with a final status, TaskStop/KillShell, or clearAll() when Claude's Stop
+ * hook reports no running background task. jobs() gives the running ones in start order.
+ */
+export class BackgroundTracker {
+  constructor() {
+    this.uses = new Map(); // tool_use id -> {name, input, at}
+    this.list = new Map(); // key -> job {key, kind, label, startedAt, taskId, agentId, toolUseId}
+  }
+
+  /** Returns true when the set of running jobs changed. */
+  feed(line) {
+    if (!line.includes("tool_use") && !line.includes("task-notification") && !line.includes("toolUseResult")) return false;
+    let d;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    if (d.isSidechain || d.type === "api-request-blob" || d.type === "api-request" || d.type === "api-request-shape") return false;
+    const at = toMs(d.timestamp) || Date.now();
+    let changed = false;
+    // Notifications arrive as queue operations, queued-command attachments or plain user text
+    const raw = typeof d.content === "string" ? d.content : d.attachment?.prompt || (typeof d.message?.content === "string" ? d.message.content : "");
+    if (raw && raw.includes("<task-notification>")) changed = this.notify(raw) || changed;
+    const c = d.message?.content;
+    if (!Array.isArray(c)) return changed;
+    for (const b of c) {
+      if (b.type === "tool_use") {
+        this.uses.set(b.id, { name: b.name, input: b.input || {}, at });
+        if (b.name === "Agent" || b.name === "Task") {
+          this.list.set(b.id, { key: b.id, kind: "agent", label: b.input?.description || toolLabel(b.name, b.input), startedAt: at, toolUseId: b.id });
+          changed = true;
+        } else if ((b.name === "TaskStop" || b.name === "KillShell") && (b.input?.task_id || b.input?.shell_id)) {
+          changed = this.finish(String(b.input.task_id || b.input.shell_id)) || changed;
+        }
+      } else if (b.type === "tool_result") {
+        changed = this.result(b, d.toolUseResult, at) || changed;
+      } else if (b.type === "text" && b.text?.includes("<task-notification>")) {
+        changed = this.notify(b.text) || changed;
+      }
+    }
+    return changed;
+  }
+
+  result(b, r, at) {
+    const use = this.uses.get(b.tool_use_id);
+    this.uses.delete(b.tool_use_id);
+    const text = typeof b.content === "string" ? b.content : Array.isArray(b.content) ? b.content.map((x) => x?.text || "").join("\n") : "";
+    const agent = this.list.get(b.tool_use_id);
+    if (agent) {
+      if (r?.isAsync && r.agentId && !b.is_error) {
+        agent.agentId = String(r.agentId);
+        agent.taskId = agent.agentId;
+        return false;
+      }
+      const m = text.match(/agentId: (\w+)/);
+      if (m && /launched|background/i.test(text) && !b.is_error) {
+        agent.agentId = agent.taskId = m[1];
+        return false;
+      }
+      this.list.delete(b.tool_use_id); // a foreground subagent ends with its result
+      return true;
+    }
+    if (!use || b.is_error || !BG_TOOLS.has(use.name)) return false;
+    // Only Claude Code's own wording at the very start: a command's output may quote the same words
+    const m = text.match(/^(?:Command running in background with ID: (\w+)|Command did not complete[^\n]*?moved to the background \(ID: (\w+)\)|Monitor started[^\n]*?ID: (\w+))/);
+    const id = r?.backgroundTaskId || (use.name !== "Bash" && typeof r?.taskId === "string" ? r.taskId : null) || m?.[1] || m?.[2] || m?.[3];
+    if (!id) return false;
+    const kind = use.name === "Bash" ? "bash" : use.name === "Monitor" ? "monitor" : "other";
+    this.list.set(String(id), { key: String(id), kind, label: toolLabel(use.name, use.input) || use.name, startedAt: use.at || at, taskId: String(id) });
+    return true;
+  }
+
+  notify(text) {
+    let changed = false;
+    const re = /<task-notification>([\s\S]*?)<\/task-notification>/g;
+    let m;
+    while ((m = re.exec(text))) {
+      const id = m[1].match(/<task-id>\s*([^<\s]+)\s*<\/task-id>/)?.[1];
+      const status = (m[1].match(/<status>\s*([^<\s]+)\s*<\/status>/)?.[1] || "").toLowerCase();
+      if (id && JOB_DONE.has(status)) changed = this.finish(id) || changed;
+    }
+    return changed;
+  }
+
+  finish(id) {
+    for (const [k, j] of this.list) {
+      if (j.taskId === id || k === id) {
+        this.list.delete(k);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Background jobs only (foreground subagents end with the turn anyway). */
+  clearBackground() {
+    let changed = false;
+    for (const [k, j] of this.list) {
+      if (j.taskId) {
+        this.list.delete(k);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  jobs() {
+    return [...this.list.values()].sort((a, b) => a.startedAt - b.startedAt);
+  }
+}
+
+/**
+ * Reads a subagent transcript (<session>/subagents/agent-<id>.jsonl): number of tool calls and the last one.
+ * feed(line) per line; state() gives {steps, last}.
+ */
+export class SubagentTail {
+  constructor() {
+    this.ids = new Set();
+    this.last = "";
+  }
+
+  feed(line) {
+    if (!line.includes("tool_use")) return false;
+    let d;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    if (d.type !== "assistant" || !Array.isArray(d.message?.content)) return false;
+    let changed = false;
+    for (const b of d.message.content) {
+      if (b.type !== "tool_use" || this.ids.has(b.id)) continue;
+      this.ids.add(b.id);
+      const label = toolLabel(b.name, b.input);
+      this.last = label ? `${b.name}: ${label}` : b.name;
+      changed = true;
+    }
+    return changed;
+  }
+
+  state() {
+    return { steps: this.ids.size, last: this.last };
+  }
+}

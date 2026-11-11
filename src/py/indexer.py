@@ -15,7 +15,7 @@ import sys
 import unicodedata
 from datetime import datetime
 
-CACHE_VERSION = 5
+CACHE_VERSION = 6
 MAX_FILES = 300  # vault files remembered per session (for the "this note" filter)
 
 
@@ -124,6 +124,9 @@ def mention_files(text, vault, out):
         add_path(out, m.group(1) or m.group(2), vault)
 
 
+COMMAND_RE = re.compile(r"<command-name>(.*?)</command-name>(?:.*?<command-args>(.*?)</command-args>)?", re.S)
+
+
 LINE_RE = {
     "title": re.compile(rb'^[^\n]*"(?:custom-title|ai-title)"[^\n]*$', re.M),
     "last": re.compile(rb'^[^\n]*"type":"last-prompt"[^\n]*$', re.M),
@@ -172,7 +175,12 @@ def parse_claude(path, vault=""):
         if not txt:
             continue
         s = txt.strip()
-        if s.startswith("<") or s.startswith("Caveat:") or s.startswith("[Request interrupted"):
+        cmd = COMMAND_RE.search(s) if s.startswith("<command-") else None
+        if cmd:
+            # A slash command like /neues-gutachten is a real prompt: count it as "/name args"
+            args = (cmd.group(2) or "").strip()
+            s = cmd.group(1).strip() + (" " + args if args else "")
+        elif s.startswith("<") or s.startswith("Caveat:") or s.startswith("[Request interrupted"):
             continue
         users += 1
         if not first:

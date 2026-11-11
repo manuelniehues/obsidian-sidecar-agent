@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.13.0
+
+- The progress row under the tabs now shows what Claude is waiting for: commands running in the background and subagents appear as small chips with their own running time. A subagent chip also counts the steps it has taken so far, and the tooltip names its last tool call. Up to two chips are shown, more as "+n". They disappear when the command or subagent ends.
+- Fixed: sessions that started with a slash command (for example `/review`) were missing from the session list and the chat history, and their tab had no name.
+
 ## 1.12.0
 
 - Chat history in the vault (optional, off by default): after each answer, Sidecar Agent can keep a readable copy of the chat as a note in a vault folder, for Claude and Antigravity alike. A vault sync such as Obsidian Sync carries the notes to your other devices. Turn it on under Settings → Chat history in the vault, where you also pick the folder and an optional start date. Notes hold your messages, the answers and a folded line per tool call, not the tool results, so they stay small. Chats can contain sensitive content, and this puts them in your vault, its sync and its backups.

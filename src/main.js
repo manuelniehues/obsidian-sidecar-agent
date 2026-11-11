@@ -19,7 +19,7 @@ import { presetLabel } from "./presets";
 import { ConfirmModal, EFFORTS, NewSessionModal, PresetsModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
-import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker } from "./transcript";
+import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
@@ -536,14 +536,14 @@ export default class SidecarAgentPlugin extends Plugin {
     const file = path.join(this.store.paths.claudeDir, `${s.st.sessionId}.jsonl`);
     let t = this.taskTrack.get(s);
     if (!t || t.file !== file) {
-      t = { file, offset: 0, rest: "", tracker: new TaskTracker() };
+      t = { file, offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), subs: new Map() };
       this.taskTrack.set(s, t);
       refresh = true;
     }
     if (refresh) {
       try {
         const size = fs.statSync(file).size;
-        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker() });
+        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), subs: new Map() });
         if (size > t.offset) {
           const fd = fs.openSync(file, "r");
           const buf = Buffer.alloc(size - t.offset);
@@ -553,14 +553,81 @@ export default class SidecarAgentPlugin extends Plugin {
           const lines = (t.rest + buf.toString("utf8")).split("\n");
           t.rest = lines.pop() || "";
           let changed = false;
-          for (const l of lines) if (t.tracker.feed(l)) changed = true;
+          for (const l of lines) {
+            if (t.tracker.feed(l)) changed = true;
+            if (t.bg.feed(l)) changed = true;
+          }
           t.changed = changed;
         }
       } catch {
         // no session file yet
       }
     }
+    // The Stop hook reports no running background task: whatever is still listed was missed (killed, lost notification)
+    if (refresh && s.agentState === "done" && s.bgTasks === 0 && t.bg.clearBackground()) t.changed = true;
+    if (refresh && this.followSubagents(s, t)) t.changed = true;
     return t.tracker.progress();
+  }
+
+  /**
+   * Running background commands and subagents of a Claude session, for the progress line:
+   * [{kind, label, startedAt, steps, last}] in start order. Uses the state read by taskProgress().
+   */
+  backgroundJobs(s) {
+    const t = this.taskTrack.get(s);
+    if (!t) return [];
+    return t.bg.jobs().map((j) => {
+      const sub = j.kind === "agent" ? t.subs.get(j.key) : null;
+      return { kind: j.kind, label: j.label, startedAt: j.startedAt, ...(sub ? sub.tail.state() : {}) };
+    });
+  }
+
+  /** Reads new lines of the subagent transcripts (<session>/subagents/agent-<id>.jsonl). True when something changed. */
+  followSubagents(s, t) {
+    const agents = t.bg.jobs().filter((j) => j.kind === "agent");
+    if (!agents.length) return false;
+    const dir = path.join(this.store.paths.claudeDir, s.st.sessionId, "subagents");
+    let changed = false;
+    for (const j of agents) {
+      let sub = t.subs.get(j.key);
+      if (!sub) {
+        let id = j.agentId;
+        // A foreground subagent's id is only named in its result: find it by the tool call in the meta files
+        if (!id) {
+          try {
+            for (const f of fs.readdirSync(dir)) {
+              if (!f.endsWith(".meta.json")) continue;
+              const meta = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+              if (meta.toolUseId === j.toolUseId) id = f.slice("agent-".length, -".meta.json".length);
+            }
+          } catch {
+            // no subagent folder yet
+          }
+        }
+        if (!id) continue;
+        sub = { file: path.join(dir, `agent-${id}.jsonl`), meta: path.join(dir, `agent-${id}.meta.json`), offset: 0, rest: "", tail: new SubagentTail() };
+        t.subs.set(j.key, sub);
+      }
+      try {
+        const size = fs.statSync(sub.file).size;
+        if (size > sub.offset) {
+          const fd = fs.openSync(sub.file, "r");
+          const buf = Buffer.alloc(size - sub.offset);
+          fs.readSync(fd, buf, 0, buf.length, sub.offset);
+          fs.closeSync(fd);
+          sub.offset = size;
+          const lines = (sub.rest + buf.toString("utf8")).split("\n");
+          sub.rest = lines.pop() || "";
+          for (const l of lines) if (sub.tail.feed(l)) changed = true;
+          // A finished background subagent whose notification has not arrived yet
+          if (j.agentId && JSON.parse(fs.readFileSync(sub.meta, "utf8")).finished === true && t.bg.finish(j.agentId)) changed = true;
+        }
+      } catch {
+        // transcript not written yet
+      }
+    }
+    for (const k of t.subs.keys()) if (!agents.some((j) => j.key === k)) t.subs.delete(k);
+    return changed;
   }
 
   /** Every 2 s: follow the task lists of working Claude sessions. */

@@ -75,7 +75,7 @@ export class SessionStore extends Events {
   merge(raw) {
     const out = [];
     for (const c of raw.claude || []) {
-      if (!c.userMessages && !c.customTitle) continue; // title-only or background leftovers
+      if (!c.userMessages && !c.customTitle && !c.aiTitle) continue; // title-only or background leftovers
       out.push({
         key: `claude:${c.id}`,
         agent: "claude",

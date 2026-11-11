@@ -875,6 +875,46 @@ body.sa-resizing.sa-resizing * {
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
+.sidecar-agent-panel .sa-progress-jobs {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 6px;
+  overflow: hidden;
+}
+.sidecar-agent-panel .sa-progress-job {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+.sidecar-agent-panel .sa-progress-job-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--sa-progress-color);
+}
+.sidecar-agent-panel .sa-progress-job-icon svg {
+  width: 11px;
+  height: 11px;
+}
+.sidecar-agent-panel .sa-progress-job-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sidecar-agent-panel .sa-progress-job-steps,
+.sidecar-agent-panel .sa-progress-job-time,
+.sidecar-agent-panel .sa-progress-job-more {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
 
 /* Voice input */
 .sidecar-agent-panel .sa-actions .sa-mic.is-recording {

@@ -175,3 +175,58 @@ test("task progress from a real session format (toolUseResult names the id)", as
   const p = tr.progress();
   assert.deepEqual([p.total, p.done, p.current], [2, 0, "S1"]);
 });
+
+test("background jobs: Bash in the background, moved after timeout, subagents, notifications, TaskStop", async () => {
+  const { BackgroundTracker, SubagentTail } = await import("../src/transcript.js");
+  const ts = "2026-11-11T16:00:00.000Z";
+  const use = (id, name, input) => JSON.stringify({ type: "assistant", timestamp: ts, message: { content: [{ type: "tool_use", id, name, input }] } });
+  const res = (id, text, r) => JSON.stringify({ type: "user", timestamp: ts, toolUseResult: r, message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] } });
+  const note = (id, status) => `<task-notification>\n<task-id>${id}</task-id>\n<status>${status}</status>\n<summary>x</summary>\n</task-notification>`;
+  const tr = new BackgroundTracker();
+  const ids = () => tr.jobs().map((j) => `${j.kind}:${j.label}`);
+  // background command (toolUseResult names the id)
+  tr.feed(use("b1", "Bash", { command: "sleep 8", description: "Warte auf Build", run_in_background: true }));
+  tr.feed(res("b1", "Command running in background with ID: bg1. Output is being written to: /tmp/x", { backgroundTaskId: "bg1" }));
+  // command moved to the background after its timeout (only the text names the id)
+  tr.feed(use("b2", "Bash", { command: "grep -r x /", description: "Suche" }));
+  tr.feed(res("b2", "Command did not complete within its 120s timeout and was moved to the background (ID: bg2). Output …"));
+  // a normal command whose output merely quotes such a text is no job
+  tr.feed(use("b3", "Bash", { command: "cat log", description: "Log lesen" }));
+  tr.feed(res("b3", "157:{\"content\":\"Command running in background with ID: zzz\"}"));
+  // TaskUpdate results carry a taskId too: no job
+  tr.feed(use("u1", "TaskUpdate", { taskId: "1", status: "completed" }));
+  tr.feed(res("u1", "Updated task #1 status", { success: true, taskId: "1" }));
+  // background subagent and a foreground one
+  tr.feed(use("a1", "Agent", { description: "Recherche", prompt: "…" }));
+  tr.feed(res("a1", [{ type: "text", text: "Async agent launched successfully.\nagentId: ag1" }], { isAsync: true, status: "async_launched", agentId: "ag1" }));
+  tr.feed(use("a2", "Agent", { description: "Prüfung", prompt: "…" }));
+  assert.deepEqual(ids(), ["bash:Warte auf Build", "bash:Suche", "agent:Recherche", "agent:Prüfung"]);
+  tr.feed(res("a2", [{ type: "text", text: "Ergebnis …" }], { status: "completed", agentId: "ag2" }));
+  assert.deepEqual(ids(), ["bash:Warte auf Build", "bash:Suche", "agent:Recherche"]);
+  // internal copies (api-request-blob) and subagent lines change nothing
+  assert.equal(tr.feed(JSON.stringify({ type: "api-request-blob", content: note("bg1", "completed") })), false);
+  assert.equal(tr.feed(JSON.stringify({ type: "user", isSidechain: true, message: { content: note("bg1", "completed") } })), false);
+  // notification as queue operation, as queued-command attachment, and TaskStop
+  assert.equal(tr.feed(JSON.stringify({ type: "queue-operation", operation: "enqueue", content: note("bg1", "completed") })), true);
+  tr.feed(JSON.stringify({ type: "attachment", attachment: { type: "queued_command", prompt: note("bg1", "completed") } }));
+  assert.equal(tr.feed(JSON.stringify({ type: "queue-operation", content: note("ag1", "running") })), false);
+  tr.feed(JSON.stringify({ type: "queue-operation", operation: "enqueue", content: note("ag1", "completed") }));
+  assert.deepEqual(ids(), ["bash:Suche"]);
+  tr.feed(use("s1", "TaskStop", { task_id: "bg2" }));
+  assert.deepEqual(ids(), []);
+  assert.equal(tr.jobs().length, 0);
+  // clearBackground drops background jobs only
+  tr.feed(use("b4", "Bash", { command: "sleep 1", run_in_background: true }));
+  tr.feed(res("b4", "Command running in background with ID: bg4.", { backgroundTaskId: "bg4" }));
+  tr.feed(use("a3", "Agent", { description: "Vordergrund" }));
+  assert.equal(tr.clearBackground(), true);
+  assert.deepEqual(ids(), ["agent:Vordergrund"]);
+  assert.equal(tr.jobs()[0].startedAt, Date.parse(ts));
+
+  const tail = new SubagentTail();
+  tail.feed(JSON.stringify({ type: "assistant", isSidechain: true, message: { content: [{ type: "tool_use", id: "x1", name: "Read", input: { file_path: "/a/b/hot.md" } }] } }));
+  tail.feed(JSON.stringify({ type: "assistant", isSidechain: true, message: { content: [{ type: "tool_use", id: "x2", name: "Bash", input: { command: "ls", description: "Ordner auflisten" } }] } }));
+  tail.feed(JSON.stringify({ type: "api-request-blob", message: { content: [{ type: "tool_use", id: "x9", name: "Bash", input: {} }] } }));
+  tail.feed(JSON.stringify({ type: "assistant", isSidechain: true, message: { content: [{ type: "tool_use", id: "x2", name: "Bash", input: { command: "ls" } }] } }));
+  assert.deepEqual(tail.state(), { steps: 2, last: "Bash: Ordner auflisten" });
+});
