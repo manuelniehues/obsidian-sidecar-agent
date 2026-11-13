@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   agySkipPermissions: false,
   agyRemoteControl: false,
   agyDefaultModel: "", // "" = agy's own default, "newest-flash" = newest Flash model, otherwise a model id
+  agyHiddenModels: "", // comma-separated terms; agy models whose id or label contains one are left out of all pickers
   notify: "unseen", // unseen | off
   claudeTaskTools: true, // CLAUDE_CODE_ENABLE_TODO_TOOLS for plugin sessions (task list → progress row)
   autoResume: true,
@@ -252,6 +253,18 @@ export class SidecarSettingTab extends PluginSettingTab {
           save();
         });
       });
+    new Setting(el)
+      .setName(t("set.agyHide"))
+      .setDesc(t("set.agyHideDesc"))
+      .addText((tx) =>
+        tx
+          .setPlaceholder("flash, gpt")
+          .setValue(s.agyHiddenModels || "")
+          .onChange((v) => {
+            s.agyHiddenModels = v;
+            save();
+          }),
+      );
     new Setting(el)
       .setName(t("set.agySkip"))
       .setDesc(t("set.agySkipDesc"))

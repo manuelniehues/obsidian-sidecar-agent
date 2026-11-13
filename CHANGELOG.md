@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.1
+
+- New setting "Hide models" (Antigravity): comma-separated terms such as `flash`. Models whose name contains one of them no longer appear in the model pickers. A saved task with "Newest Flash model" keeps working.
+
 ## 1.15.0
 
 - Polling loops without a fixed end (for example `until curl -s localhost:8080; do sleep 300; done`) now show their next check in the progress row: "next check 17:55 · in 4:12". When a check has passed, the countdown moves on to the following one. The tooltip says that Claude only reports back once the condition is met.

@@ -341,6 +341,21 @@ export default class SidecarAgentPlugin extends Plugin {
         .filter(Boolean)
         .map((m) => [m, m]);
     }
+    return this.hideAgyModels(await this.allAgyModels());
+  }
+
+  /** Leaves out models matching one of the comma-separated terms in "Hide models". */
+  hideAgyModels(models) {
+    const terms = (this.settings.agyHiddenModels || "")
+      .split(",")
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean);
+    if (!terms.length) return models;
+    return models.filter(([id, label]) => !terms.some((x) => id.toLowerCase().includes(x) || String(label).toLowerCase().includes(x)));
+  }
+
+  /** All models from `agy models`, cached for 7 days. */
+  async allAgyModels() {
     const c = this.settings.agyModelsCache;
     if (c && Date.now() - c.at < 7 * 86400000 && c.models.length) return c.models;
     const bin = this.agyPath();
@@ -1319,7 +1334,7 @@ export default class SidecarAgentPlugin extends Plugin {
   /** Starts a session from the values of the dialog or of a standard task. */
   async startFromForm(v) {
     // "newest-flash" is resolved at the start, so a saved task follows new models
-    const model = v.model === "newest-flash" ? newestFlashModel(await this.modelOptions("agy")) : v.model;
+    const model = v.model === "newest-flash" ? newestFlashModel(await this.allAgyModels()) : v.model;
     const s = await this.openTerminal({
       agent: v.agent,
       mode: "new",
