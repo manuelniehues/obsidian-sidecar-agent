@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.2
+
+- Fixed: since Obsidian 1.15.1 the terminal showed tiny letters with large gaps. GPU rendering (WebGL) draws text incorrectly there, so the terminal now uses the regular renderer on Obsidian 1.15.1 and later, even if "GPU rendering" is turned on.
+
 ## 1.15.1
 
 - New setting "Hide models" (Antigravity): comma-separated terms such as `flash`. Models whose name contains one of them no longer appear in the model pickers. A saved task with "Newest Flash model" keeps working.

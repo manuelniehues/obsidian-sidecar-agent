@@ -11,6 +11,7 @@ import PTY_HELPER from "./py/pty_helper.py";
 import fs from "fs";
 import path from "path";
 import { AGENTS, CACHE_DIR, agyLastConversation, buildEnv, mention } from "./util";
+import { webglBroken } from "./render";
 import { t } from "./i18n";
 import { creditsShown, osc52Text } from "./transcript";
 import { findPathCandidates, findWikilinks } from "./schedule";
@@ -235,7 +236,7 @@ export class TerminalSession {
     this.term.loadAddon(new Unicode11Addon());
     this.term.unicode.activeVersion = "11";
     this.term.open(this.el);
-    if (s.webgl !== false) {
+    if (s.webgl !== false && !webglBroken()) {
       try {
         const gl = new WebglAddon();
         gl.onContextLoss(() => gl.dispose());
