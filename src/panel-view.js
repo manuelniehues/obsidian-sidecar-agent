@@ -385,10 +385,13 @@ export class AgentPanelView extends ItemView {
     if (next) {
       const box = el.createSpan({ cls: "sa-progress-next" });
       setIcon(box.createSpan({ cls: "sa-progress-job-icon" }), "alarm-clock");
-      box.createSpan({ text: t(next.exact ? "progress.next" : "progress.nextLatest", { time: hhmm(next.at) }) });
-      this.nextEl = { el: box.createSpan({ cls: "sa-progress-job-time" }), at: next.at };
+      const key = next.exact ? "progress.next" : "progress.nextLatest";
+      const label = box.createSpan({ text: next.poll ? t("progress.nextPoll", { time: hhmm(next.at) }) : t(key, { time: hhmm(next.at) }) });
+      this.nextEl = { el: box.createSpan({ cls: "sa-progress-job-time" }), at: next.at, every: next.every, label };
       if (tip.length) tip.push("");
-      tip.push(t(next.exact ? "progress.nextTip" : "progress.nextLatestTip", { time: hhmm(next.at), what: next.what }));
+      const vars = { time: hhmm(next.at), what: next.what, n: Math.round((next.every || 0) / 60000) };
+      if (next.poll) tip.push(t("progress.nextPollTip", vars));
+      else tip.push(next.exact ? t("progress.nextTip", vars) : t("progress.nextLatestTip", vars));
     }
     el.setAttr("aria-label", tip.join("\n"));
     if (working && s.turnStartedAt) this.elapsedEl = el.createSpan({ cls: "sa-progress-time" });
@@ -409,6 +412,11 @@ export class AgentPanelView extends ItemView {
     }
     for (const j of jobs) {
       if (j.wait?.seconds) cands.push({ at: j.startedAt + j.wait.seconds * 1000, exact: j.wait.exact, what: j.label });
+      // A polling loop without an end ("while …; do sleep 300; done"): count down to its next check, not to a report
+      else if (j.wait?.every && j.startedAt) {
+        const every = j.wait.every * 1000;
+        cands.push({ at: j.startedAt + Math.max(1, Math.ceil((now - j.startedAt) / every)) * every, every, poll: true, what: j.label });
+      }
     }
     return cands.filter((c) => c.at > now - 5000).sort((a, b) => a.at - b.at)[0] || null;
   }
@@ -450,6 +458,12 @@ export class AgentPanelView extends ItemView {
     };
     for (const j of this.jobTimeEls || []) if (j.at) j.el.setText(fmt(Date.now() - j.at));
     if (this.nextEl) {
+      const n = this.nextEl;
+      // Polling loop: once a check is past, count down to the following one
+      if (n.every && n.at + 5000 < Date.now()) {
+        while (n.at + 5000 < Date.now()) n.at += n.every;
+        n.label.setText(t("progress.nextPoll", { time: hhmm(n.at) }));
+      }
       const left = this.nextEl.at - Date.now();
       this.nextEl.el.setText(left > 0 ? t("progress.left", { left: fmt(left) }) : t("progress.due"));
     }
