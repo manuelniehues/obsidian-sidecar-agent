@@ -782,7 +782,8 @@ export class AgentPanelView extends ItemView {
       list = note ? list.filter((e) => store.touches(e, note)) : [];
     }
     else if (this.filter !== "all") list = list.filter((e) => e.agent === this.filter);
-    if (this.query) list = list.filter((e) => store.matches(e, this.query) || (this.fulltext && this.ftKeys && this.ftKeys.has(e.key)));
+    // Searching finds real sessions only, not the chat notes from the vault (label "history")
+    if (this.query) list = list.filter((e) => !e.archived && (store.matches(e, this.query) || (this.fulltext && this.ftKeys && this.ftKeys.has(e.key))));
     return { list, openKeys };
   }
 
