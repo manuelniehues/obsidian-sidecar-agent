@@ -145,7 +145,7 @@ export class TerminalSession {
     this.plugin = plugin;
     this.uid = ++SEQ;
     this.st = { ...st };
-    this.viewMode = st.viewMode || "terminal";
+    this.viewMode = st.agent === "claude" && st.viewMode === "reader" ? "reader" : "terminal";
     this.reader = null;
     this.proc = null;
     this.term = null;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.3
+
+- The "Terminal" and "Read" switch at the right of the tab bar only appears for Claude sessions. Antigravity and the other agents have no reading view, so they always show the terminal.
+- Searching the session list finds real sessions only, not the chat notes from the vault (label "history").
+
 ## 1.15.2
 
 - Fixed: since Obsidian 1.15.1 the terminal showed tiny letters with large gaps. GPU rendering (WebGL) draws text incorrectly there, so the terminal now uses the regular renderer on Obsidian 1.15.1 and later, even if "GPU rendering" is turned on.

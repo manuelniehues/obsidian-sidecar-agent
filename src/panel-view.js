@@ -270,6 +270,7 @@ export class AgentPanelView extends ItemView {
 
   /** Switch a session between terminal and reading view. */
   setViewMode(s, mode, quiet = false) {
+    if (s.st.agent !== "claude") mode = "terminal";
     s.viewMode = mode;
     s.st.viewMode = mode; // survives a restart
     if (s !== this.active) return;
@@ -515,8 +516,9 @@ export class AgentPanelView extends ItemView {
     el.toggle(this.sessions.length > 0);
     this.emptyEl.toggle(this.sessions.length === 0);
     // Terminal ↔ reading view switch (right end of the tab bar)
+    // Only Claude has a reading view; other agents get no switch.
     const a = this.active;
-    if (a) {
+    if (a && a.st.agent === "claude") {
       const reading = a.viewMode === "reader";
       const sw = el.createDiv({ cls: "sa-viewswitch" });
       const mk = (mode, icon, text, label) => {
