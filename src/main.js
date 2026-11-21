@@ -1180,7 +1180,8 @@ export default class SidecarAgentPlugin extends Plugin {
   contextFiles(s) {
     if (s?.st.agent !== "claude") return [];
     if (!this.taskTrack.get(s)) this.taskProgress(s, true);
-    return this.taskTrack.get(s)?.files?.contextFiles() || [];
+    // Only files that exist: a failed Read (wrong path) is not in the context
+    return (this.taskTrack.get(s)?.files?.contextFiles() || []).filter((x) => fs.existsSync(x.abs));
   }
 
   /**

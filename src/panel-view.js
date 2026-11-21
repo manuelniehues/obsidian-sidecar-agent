@@ -1,6 +1,6 @@
 // Sidecar Agent – sidebar panel: sessions and search on top, terminal in the middle, info and actions below.
 import { ItemView, Menu, setIcon } from "obsidian";
-import os from "os";
+import path from "path";
 import { TerminalSession } from "./session";
 import { SessionReader } from "./reader";
 import { AGENTS, PLUGIN_NAME, dayBucket, hhmm, relTime } from "./util";
@@ -644,55 +644,62 @@ export class AgentPanelView extends ItemView {
   }
 
   /**
-   * Chip "12 · ✎ 3": files in the context (Claude) and files changed in the current or last turn.
-   * A click lists them; an entry opens the note (or shows the file in Finder).
+   * Chip "12 loaded · 3 changed": files in Claude's context and files changed in the current or last turn.
+   * A click lists them by name; an entry opens the note (or shows the file in Finder).
    */
   renderFilesChip(el, s) {
-    const ctx = this.plugin.contextFiles(s);
-    const changed = this.plugin.turnChanges(s);
+    const { ctx, changed } = this.fileLists(s);
     if (!ctx.length && !changed.length) return;
     const c = el.createEl("button", { cls: "sa-chip-btn sa-files-chip" });
-    if (ctx.length) {
-      setIcon(c.createSpan({ cls: "sa-chip-icon" }), "files");
-      c.createSpan({ text: String(ctx.length) });
-    }
-    if (changed.length) {
-      setIcon(c.createSpan({ cls: "sa-chip-icon" }), "file-pen");
-      c.createSpan({ cls: "sa-files-changed", text: String(changed.length) });
-    }
-    c.setAttr("aria-label", [ctx.length ? t(ctx.length === 1 ? "files.ctxTip1" : "files.ctxTip", { n: ctx.length }) : "", changed.length ? t(changed.length === 1 ? "files.changedTip1" : "files.changedTip", { n: changed.length }) : ""].filter(Boolean).join("\n"));
+    setIcon(c.createSpan({ cls: "sa-chip-icon" }), "files");
+    const parts = [];
+    if (ctx.length) parts.push(t("files.chipCtx", { n: ctx.length }));
+    if (changed.length) parts.push(t("files.chipChanged", { n: changed.length }));
+    c.createSpan({ text: parts.join(" · ") });
+    c.setAttr("aria-label", t("files.chipTip"));
     c.onclick = (ev) => this.filesMenu(s, ev);
+  }
+
+  /** Changed files of the turn, and the context files that are not among them (a file shows up only once). */
+  fileLists(s) {
+    const changed = this.plugin.turnChanges(s);
+    const seen = new Set(changed.map((x) => x.abs));
+    const ctx = this.plugin.contextFiles(s).filter((x) => !seen.has(x.abs));
+    return { ctx, changed };
   }
 
   filesMenu(s, ev) {
     const m = new Menu();
-    const base = this.plugin.vaultPath + "/";
-    const show = (abs) => (abs.startsWith(base) ? abs.slice(base.length) : abs.replace(os.homedir(), "~"));
+    const { ctx, changed } = this.fileLists(s);
+    // File names only; the parent folder is added when two entries share a name
+    const all = [...changed, ...ctx].map((x) => x.abs);
+    const count = new Map();
+    for (const a of all) count.set(path.basename(a), (count.get(path.basename(a)) || 0) + 1);
+    const name = (abs) => (count.get(path.basename(abs)) > 1 ? `${path.basename(path.dirname(abs))}/${path.basename(abs)}` : path.basename(abs));
     const head = (text) => m.addItem((i) => (i.setIsLabel ? i.setTitle(text).setIsLabel(true) : i.setTitle(text).setDisabled(true)));
     const MAX = 25;
-    const changed = this.plugin.turnChanges(s);
     if (changed.length) {
-      head(t(this.isWorking(s) ? "files.changedNow" : "files.changedLast"));
+      head(t(this.isWorking(s) ? "files.changedNow" : "files.changedLast", { n: changed.length }));
       const icon = { create: "file-plus", delete: "file-x", modify: "file-pen" };
       for (const x of changed.slice(0, MAX)) {
+        const extra = [x.kind === "create" ? t("files.created") : "", x.kind === "delete" ? t("files.deleted") : "", x.sure ? "" : t("files.maybe")].filter(Boolean);
         m.addItem((i) => {
-          i.setTitle(`${x.rel || show(x.abs)}${x.kind === "delete" ? ` (${t("files.deleted")})` : ""}${x.sure ? "" : ` (${t("files.maybe")})`}`).setIcon(icon[x.kind] || "file-pen");
+          i.setTitle(`${name(x.abs)}${extra.length ? ` · ${extra.join(", ")}` : ""}`).setIcon(icon[x.kind] || "file-pen");
           if (x.kind === "delete") i.setDisabled(true);
           else i.onClick((e) => this.plugin.openTermLink({ abs: x.abs }, e));
         });
       }
       if (changed.length > MAX) head(t("files.more", { n: changed.length - MAX }));
     }
-    const ctx = this.plugin.contextFiles(s);
     if (ctx.length) {
       if (changed.length) m.addSeparator();
       head(t("files.ctxHead", { n: ctx.length }));
-      const icon = { instructions: "scroll-text", mention: "at-sign", compact: "archive", read: "file-text" };
+      const how = { instructions: t("files.howStart"), mention: t("files.howMention"), compact: t("files.howCompact") };
       for (const x of ctx.slice(0, MAX)) {
         m.addItem((i) =>
           i
-            .setTitle(show(x.abs))
-            .setIcon(icon[x.how] || "file-text")
+            .setTitle(`${name(x.abs)}${how[x.how] ? ` · ${how[x.how]}` : ""}`)
+            .setIcon("file-text")
             .onClick((e) => this.plugin.openTermLink({ abs: x.abs }, e)),
         );
       }
