@@ -633,6 +633,7 @@ export class AgentPanelView extends ItemView {
     else if (s.st.agent === "agy") this.renderAgyContext(el, s);
     this.renderLimits(el, s);
     this.renderFilesChip(el, s);
+    this.renderSkillChip(el, s);
     const lockOn = !!this.plugin.settings.focusLock;
     const lock = el.createEl("button", { cls: `sa-lock clickable-icon${lockOn ? " is-on" : ""}`, attr: { "aria-label": lockOn ? t("lock.on") : t("lock.off") } });
     setIcon(lock, lockOn ? "lock" : "lock-open");
@@ -658,6 +659,29 @@ export class AgentPanelView extends ItemView {
     c.createSpan({ text: parts.join(" · ") });
     c.setAttr("aria-label", t("files.chipTip"));
     c.onclick = (ev) => this.filesMenu(s, ev);
+  }
+
+  /** Chip with the skill loaded last ("+n" for more); a click lists them, an entry opens the skill. */
+  renderSkillChip(el, s) {
+    const list = this.plugin.loadedSkills(s);
+    if (!list.length) return;
+    const c = el.createEl("button", { cls: "sa-chip-btn sa-skill-chip" });
+    setIcon(c.createSpan({ cls: "sa-chip-icon" }), "sparkles");
+    c.createSpan({ text: list[0].name + (list.length > 1 ? ` +${list.length - 1}` : "") });
+    c.setAttr("aria-label", t("skills.tip"));
+    c.onclick = (ev) => {
+      const m = new Menu();
+      m.addItem((i) => (i.setIsLabel ? i.setTitle(t("skills.head", { n: list.length })).setIsLabel(true) : i.setTitle(t("skills.head", { n: list.length })).setDisabled(true)));
+      for (const x of list) {
+        m.addItem((i) =>
+          i
+            .setTitle(`${x.name}${x.at ? ` · ${hhmm(x.at)}` : ""}`)
+            .setIcon("sparkles")
+            .onClick((e) => this.plugin.openTermLink({ abs: x.abs }, e)),
+        );
+      }
+      m.showAtMouseEvent(ev);
+    };
   }
 
   /** Changed files of the turn, and the context files that are not among them (a file shows up only once). */

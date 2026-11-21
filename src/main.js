@@ -19,7 +19,7 @@ import { presetLabel } from "./presets";
 import { ConfirmModal, EFFORTS, NewSessionModal, PresetsModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
-import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail, FileTracker } from "./transcript";
+import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail, FileTracker, SkillTracker } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
@@ -555,14 +555,14 @@ export default class SidecarAgentPlugin extends Plugin {
     const file = path.join(this.store.paths.claudeDir, `${s.st.sessionId}.jsonl`);
     let t = this.taskTrack.get(s);
     if (!t || t.file !== file) {
-      t = { file, offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), subs: new Map() };
+      t = { file, offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), skills: new SkillTracker(), subs: new Map() };
       this.taskTrack.set(s, t);
       refresh = true;
     }
     if (refresh) {
       try {
         const size = fs.statSync(file).size;
-        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), subs: new Map() });
+        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), skills: new SkillTracker(), subs: new Map() });
         if (size > t.offset) {
           const fd = fs.openSync(file, "r");
           const buf = Buffer.alloc(size - t.offset);
@@ -576,6 +576,7 @@ export default class SidecarAgentPlugin extends Plugin {
             if (t.tracker.feed(l)) changed = true;
             if (t.bg.feed(l)) changed = true;
             if (t.files.feed(l)) t.filesChanged = true;
+            if (t.skills.feed(l)) t.filesChanged = true;
           }
           t.changed = changed;
         }
@@ -1182,6 +1183,19 @@ export default class SidecarAgentPlugin extends Plugin {
     if (!this.taskTrack.get(s)) this.taskProgress(s, true);
     // Only files that exist: a failed Read (wrong path) is not in the context
     return (this.taskTrack.get(s)?.files?.contextFiles() || []).filter((x) => fs.existsSync(x.abs));
+  }
+
+  /**
+   * Skills loaded in a Claude session, newest first: [{name, dir, at, abs}] with abs the file a click opens
+   * (the vault note SKILLS/<name>.md when there is one, else SKILL.md in the skill folder).
+   */
+  loadedSkills(s) {
+    if (s?.st.agent !== "claude") return [];
+    if (!this.taskTrack.get(s)) this.taskProgress(s, true);
+    return (this.taskTrack.get(s)?.skills?.list() || []).map((x) => {
+      const note = this.app.vault.getAbstractFileByPath(`SKILLS/${x.name}.md`);
+      return { ...x, abs: note instanceof TFile ? path.join(this.vaultPath, note.path) : path.join(x.dir, "SKILL.md") };
+    });
   }
 
   /**

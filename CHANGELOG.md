@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.0
+
+- New skill chip next to the files chip (Claude): it names the skill loaded last in the session, "+n" when there are more, whether it was typed as /name or called by Claude. A click lists them with the time they were loaded; an entry opens the skill (the vault note SKILLS/<name>.md when there is one, else its SKILL.md). Compacting starts the list over.
+- The files chip reads "4 loaded · 1 changed". Its list shows file names only, in two sections ("Changed in this task" and "Loaded into the context"), each file once, with where it came from ("at the start", "mentioned with @", "after compacting"). Files that do not exist (a failed read) are left out.
+
 ## 1.17.0
 
 - New chip in the info row: how many files are in Claude's context and how many files changed in the current or last task. A click lists them, an entry opens the note (other files are shown in Finder).

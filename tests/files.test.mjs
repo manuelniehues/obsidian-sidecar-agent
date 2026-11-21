@@ -21,3 +21,15 @@ test("FileTracker lists context files and edits, compacting empties the context"
   f.feed(line({ type: "attachment", timestamp: "2026-11-21T11:00:01Z", attachment: { type: "compact_file_reference", filename: "/v/AGENTS.md" } }));
   assert.deepEqual(f.contextFiles().map((x) => x.how), ["compact"]);
 });
+
+test("SkillTracker lists skills from /commands and the Skill tool, newest first", async () => {
+  const { SkillTracker } = await import("../src/transcript.js");
+  const sk = new SkillTracker();
+  const meta = (dir, ts) => JSON.stringify({ type: "user", isMeta: true, timestamp: ts, message: { content: [{ type: "text", text: `Base directory for this skill: ${dir}\n\n# Skill` }] } });
+  assert.equal(sk.feed(meta("/v/.claude/skills/gutachten", "2026-11-21T10:00:00Z")), true);
+  sk.feed(meta("/Users/x/.claude/skills/vermenschlichen", "2026-11-21T10:05:00Z"));
+  sk.feed(meta("/v/.claude/skills/gutachten", "2026-11-21T10:10:00Z"));
+  assert.deepEqual(sk.list().map((x) => x.name), ["gutachten", "vermenschlichen"]);
+  assert.equal(sk.feed(JSON.stringify({ type: "user", isCompactSummary: true, message: { content: "s" } })), true);
+  assert.deepEqual(sk.list(), []);
+});

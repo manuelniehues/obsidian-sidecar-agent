@@ -563,3 +563,45 @@ export class FileTracker {
     return [...this.edited].filter(([, at]) => at >= since).map(([abs, at]) => ({ abs, at })).sort((a, b) => b.at - a.at);
   }
 }
+
+/**
+ * Skills loaded in a Claude session: Claude Code adds a hidden message "Base directory for this skill: <dir>"
+ * when a skill is run, typed as /name or called through the Skill tool. Compacting starts the list over.
+ */
+export class SkillTracker {
+  constructor() {
+    this.skills = new Map(); // name -> {name, dir, at}
+  }
+
+  /** Returns true when the list changed. */
+  feed(line) {
+    if (!line.includes("Base directory for this skill") && !line.includes("isCompactSummary")) return false;
+    let d;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    if (d.isSidechain || d.type !== "user") return false;
+    if (d.isCompactSummary) {
+      if (!this.skills.size) return false;
+      this.skills.clear();
+      return true;
+    }
+    const c = d.message?.content;
+    const text = typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (b.type === "text" ? b.text : "")).join("\n") : "";
+    const m = text.match(/^Base directory for this skill: (.+)$/m);
+    if (!m) return false;
+    const dir = m[1].trim();
+    const name = dir.split("/").filter(Boolean).pop();
+    if (!name) return false;
+    this.skills.delete(name); // re-insert so the newest comes last
+    this.skills.set(name, { name, dir, at: toMs(d.timestamp) || 0 });
+    return true;
+  }
+
+  /** Loaded skills, newest first: [{name, dir, at}]. */
+  list() {
+    return [...this.skills.values()].reverse();
+  }
+}
