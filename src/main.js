@@ -1152,6 +1152,25 @@ export default class SidecarAgentPlugin extends Plugin {
     return file ? { wikilink: link, file } : null;
   }
 
+  /** Vault files by lower-case file name ("hot.md" → ["AI AGENTS/Second Brain/hot.md"]), rebuilt after vault changes. */
+  fileNames() {
+    if (!this.nameIndex) {
+      this.nameIndex = new Map();
+      for (const f of this.app.vault.getFiles()) {
+        const k = f.name.toLowerCase();
+        const list = this.nameIndex.get(k);
+        if (list) list.push(f.path);
+        else this.nameIndex.set(k, [f.path]);
+      }
+      if (!this.nameIndexHooked) {
+        this.nameIndexHooked = true;
+        const reset = () => (this.nameIndex = null);
+        for (const ev of ["create", "delete", "rename"]) this.registerEvent(this.app.vault.on(ev, reset));
+      }
+    }
+    return this.nameIndex;
+  }
+
   /** Absolute path of an existing file or folder named in the terminal (absolute, ~/…, or relative to the vault), or null. */
   resolveTermPath(raw) {
     let p = String(raw || "").trim();
@@ -1160,8 +1179,10 @@ export default class SidecarAgentPlugin extends Plugin {
     if (p.startsWith("~/")) p = path.join(os.homedir(), p.slice(2));
     const abs = path.isAbsolute(p) ? p : path.join(this.vaultPath, p);
     if (!path.isAbsolute(p) && !p.includes("/")) {
-      // a bare file name only counts when it is a vault file at the root
-      if (!fs.existsSync(abs)) return null;
+      // a bare file name: a file at the vault root, or else a file with that name that is unique in the vault
+      if (fs.existsSync(abs)) return abs;
+      const hits = this.fileNames().get(p.toLowerCase());
+      return hits?.length === 1 ? path.join(this.vaultPath, hits[0]) : null;
     }
     try {
       fs.statSync(abs);

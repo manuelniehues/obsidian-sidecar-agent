@@ -201,3 +201,23 @@ export function findPathCandidates(text) {
   }
   return out;
 }
+
+/**
+ * Links that run across the end of line `a` into line `b`: agents such as Claude Code break long
+ * lines themselves, so the terminal does not know that `b` continues `a`. `b` loses its indentation;
+ * the break either replaced a space or split a word, so both joins are tried (no space first).
+ * `detect(text)` returns [{start, end, target}] for existing targets only, which keeps guesses safe.
+ * Returns [{target, text, a: [start, end], b: [start, end]}] with character indices in `a` and `b`.
+ */
+export function crossLineLinks(a, b, detect) {
+  const aLen = String(a || "").trimEnd().length;
+  const k = String(b || "").length - String(b || "").trimStart().length;
+  if (!aLen || k >= String(b || "").length) return [];
+  for (const sep of ["", " "]) {
+    const text = a.slice(0, aLen) + sep + b.slice(k);
+    const bStart = aLen + sep.length;
+    const hits = detect(text).filter((f) => f.start < aLen && f.end > bStart);
+    if (hits.length) return hits.map((f) => ({ target: f.target, text: text.slice(f.start, f.end), a: [f.start, aLen], b: [k, k + f.end - bStart] }));
+  }
+  return [];
+}

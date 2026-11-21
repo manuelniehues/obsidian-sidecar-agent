@@ -1,7 +1,7 @@
 // Scheduled runs, cron, usage pace and terminal link candidates (src/schedule.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cronNext, findPathCandidates, findWikilinks, ingestSchedule, newScheduleState, pendingSchedules, usagePace } from "../src/schedule.js";
+import { cronNext, crossLineLinks, findPathCandidates, findWikilinks, ingestSchedule, newScheduleState, pendingSchedules, usagePace } from "../src/schedule.js";
 
 const at = (s) => new Date(s).getTime(); // local time
 
@@ -105,4 +105,30 @@ test("terminal links: wikilinks and path candidates", () => {
   const f = findPathCandidates("Ordner `AI AGENTS/Sidecar Agent/` angelegt");
   assert.ok(f.some((x) => x.starts.length === 1 && "Ordner `AI AGENTS/Sidecar Agent/` angelegt".slice(x.starts[0], x.end) === "AI AGENTS/Sidecar Agent/"));
   assert.deepEqual(findPathCandidates("nichts hier"), []);
+});
+
+test("crossLineLinks joins a path broken by the agent", () => {
+  const exists = new Set(["AI AGENTS/Second Brain/hot.md", "~/Vault-Backup-vor-Headless-2026-11-07"]);
+  const detect = (text) => {
+    const out = [];
+    for (const c of findPathCandidates(text)) {
+      for (const st of c.starts) if (exists.has(text.slice(st, c.end))) { out.push({ start: st, end: c.rangeEnd, target: text.slice(st, c.end) }); break; }
+    }
+    const m = text.match(/~\/Vault-Backup-vor-Headless-2026-11-07/);
+    if (m) out.push({ start: m.index, end: m.index + m[0].length, target: m[0] });
+    return out;
+  };
+  // broken at a space
+  const a = "Steht in AI AGENTS/Second   ";
+  const b = "  Brain/hot.md und mehr";
+  const [h] = crossLineLinks(a, b, detect);
+  assert.equal(h.text, "AI AGENTS/Second Brain/hot.md");
+  assert.deepEqual(h.a, [9, 25]);
+  assert.deepEqual(h.b, [2, 14]);
+  // broken inside a word
+  const [w] = crossLineLinks("dann ~/Vault-Backup-vor-Headless-2026-1", "1-07` löschen.", detect);
+  assert.equal(w.text, "~/Vault-Backup-vor-Headless-2026-11-07");
+  assert.deepEqual(w.b, [0, 4]);
+  // a link that stays on one line is not returned
+  assert.deepEqual(crossLineLinks("siehe AI AGENTS/Second Brain/hot.md", "weiter", detect), []);
 });

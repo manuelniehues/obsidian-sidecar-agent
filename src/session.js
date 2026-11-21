@@ -14,7 +14,7 @@ import { AGENTS, CACHE_DIR, agyLastConversation, buildEnv, mention } from "./uti
 import { webglBroken } from "./render";
 import { t } from "./i18n";
 import { creditsShown, osc52Text } from "./transcript";
-import { findPathCandidates, findWikilinks } from "./schedule";
+import { crossLineLinks, findPathCandidates, findWikilinks } from "./schedule";
 
 // Processes that are shutting down. Kept on window so it survives a plugin reload.
 // Resuming the same session waits for them, otherwise the old process would keep e.g. Remote Control.
@@ -270,12 +270,47 @@ export class TerminalSession {
 
   /**
    * Links for vault paths and [[wikilinks]] in buffer line y (1-based): a click opens the note in Obsidian,
-   * other files and folders show in Finder. Only targets that exist become links.
+   * other files and folders show in Finder. Only targets that exist become links. A link may also run
+   * across the end of a line that the agent broke itself (see crossLineLinks).
    */
   vaultLinks(y) {
-    const line = this.term?.buffer.active.getLine(y - 1);
-    if (!line) return undefined;
-    // Text of the line plus the terminal column of every character (wide characters take two cells)
+    const cur = this.lineInfo(y);
+    if (!cur) return undefined;
+    const out = [];
+    const taken = []; // [start, end) on this line covered by a link across two lines
+    // A line counts as broken by the agent only when it reaches close to the right edge
+    const full = (info) => info && info.text.trimEnd().length >= Math.max(this.term.cols / 2, this.term.cols - 40);
+    const cross = (ya, A, B) => {
+      if (!full(A) || !B) return;
+      for (const h of crossLineLinks(A.text, B.text, (x) => this.detectLinks(x))) {
+        const mine = ya === y ? h.a : h.b;
+        taken.push(mine);
+        out.push({
+          text: h.text,
+          range: { start: { x: A.col[h.a[0]], y: ya }, end: { x: B.col[h.b[1] - 1], y: ya + 1 } },
+          decorations: { underline: true, pointerCursor: true },
+          activate: (ev) => this.plugin.openTermLink(h.target, ev),
+        });
+      }
+    };
+    cross(y - 1, this.lineInfo(y - 1), cur);
+    cross(y, cur, this.lineInfo(y + 1));
+    for (const f of this.detectLinks(cur.text)) {
+      if (taken.some(([s, e]) => f.start < e && f.end > s)) continue;
+      out.push({
+        text: cur.text.slice(f.start, f.end),
+        range: { start: { x: cur.col[f.start], y }, end: { x: cur.col[f.end - 1], y } },
+        decorations: { underline: true, pointerCursor: true },
+        activate: (ev) => this.plugin.openTermLink(f.target, ev),
+      });
+    }
+    return out.length ? out : undefined;
+  }
+
+  /** Text of buffer line y (1-based) plus the terminal column of every character (wide characters take two cells). */
+  lineInfo(y) {
+    const line = y >= 1 ? this.term?.buffer.active.getLine(y - 1) : null;
+    if (!line) return null;
     let text = "";
     const col = [];
     for (let x = 0; x < line.length; x++) {
@@ -285,34 +320,32 @@ export class TerminalSession {
       for (let i = 0; i < ch.length; i++) col.push(x + 1);
       text += ch;
     }
-    if (!text.includes("[[") && !text.includes("/") && !text.includes(".")) return undefined;
+    return { text, col };
+  }
+
+  /** Existing link targets in a piece of text: [{start, end, target}], cached by text. */
+  detectLinks(text) {
+    if (!text.includes("[[") && !text.includes("/") && !text.includes(".")) return [];
     let found = this.linkCache.get(text);
-    if (!found) {
-      found = [];
-      for (const w of findWikilinks(text)) {
-        const target = this.plugin.resolveWikilink(w.link);
-        if (target) found.push({ start: w.start, end: w.end, target });
-      }
-      for (const c of findPathCandidates(text)) {
-        if (found.some((f) => c.end > f.start && c.starts[0] < f.end && f.target.wikilink)) continue;
-        for (const st of c.starts) {
-          const abs = this.plugin.resolveTermPath(text.slice(st, c.end));
-          if (abs) {
-            if (!found.some((f) => st < f.end && c.rangeEnd > f.start)) found.push({ start: st, end: c.rangeEnd, target: { abs } });
-            break;
-          }
+    if (found) return found;
+    found = [];
+    for (const w of findWikilinks(text)) {
+      const target = this.plugin.resolveWikilink(w.link);
+      if (target) found.push({ start: w.start, end: w.end, target });
+    }
+    for (const c of findPathCandidates(text)) {
+      if (found.some((f) => c.end > f.start && c.starts[0] < f.end && f.target.wikilink)) continue;
+      for (const st of c.starts) {
+        const abs = this.plugin.resolveTermPath(text.slice(st, c.end));
+        if (abs) {
+          if (!found.some((f) => st < f.end && c.rangeEnd > f.start)) found.push({ start: st, end: c.rangeEnd, target: { abs } });
+          break;
         }
       }
-      this.linkCache.set(text, found);
-      if (this.linkCache.size > 300) this.linkCache.delete(this.linkCache.keys().next().value);
     }
-    if (!found.length) return undefined;
-    return found.map((f) => ({
-      text: text.slice(f.start, f.end),
-      range: { start: { x: col[f.start], y }, end: { x: col[f.end - 1], y } },
-      decorations: { underline: true, pointerCursor: true },
-      activate: (ev) => this.plugin.openTermLink(f.target, ev),
-    }));
+    this.linkCache.set(text, found);
+    if (this.linkCache.size > 300) this.linkCache.delete(this.linkCache.keys().next().value);
+    return found;
   }
 
   /**

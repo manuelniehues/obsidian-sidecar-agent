@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.0
+
+- Bare file names in the terminal are links too: when Claude writes "updated hot.md", the name links to the note if exactly one file in the vault has that name (or it sits at the vault root).
+- Links across a line break: agents such as Claude Code break long lines themselves, which used to cut paths and `[[wikilinks]]` in two. A path or wikilink that runs from the end of one line into the next is now recognized and underlined on both lines, whether the break replaced a space or split a word. As before, only targets that exist become links.
+
 ## 1.15.3
 
 - The "Terminal" and "Read" switch at the right of the tab bar only appears for Claude sessions. Antigravity and the other agents have no reading view, so they always show the terminal.
