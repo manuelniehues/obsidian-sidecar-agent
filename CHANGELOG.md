@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.0
+
+- New chip in the info row: how many files are in Claude's context and how many files changed in the current or last task. A click lists them, an entry opens the note (other files are shown in Finder).
+  - In the context: files Claude read, files mentioned with @, the instruction files loaded at the start (CLAUDE.md and the like) and the files re-attached after compacting. Compacting starts the list over. Files read with shell commands (cat, grep) cannot be seen and are not listed.
+  - Changed: files Claude edited with its tools, plus every vault file that changed while the session was working, so changes made with shell commands or scripts count too, also for Antigravity. When another session was working at the same time, such a change is marked "maybe". The chat notes folder is left out.
+- When a task ends while you are looking elsewhere, a notice lists the changed files; a click on a name opens it. Not shown when notifications are turned off.
+
 ## 1.16.0
 
 - Bare file names in the terminal are links too: when Claude writes "updated hot.md", the name links to the note if exactly one file in the vault has that name (or it sits at the vault root).

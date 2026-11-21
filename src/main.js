@@ -19,7 +19,7 @@ import { presetLabel } from "./presets";
 import { ConfirmModal, EFFORTS, NewSessionModal, PresetsModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
-import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail } from "./transcript";
+import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail, FileTracker } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { t, setLanguage } from "./i18n";
@@ -167,6 +167,7 @@ export default class SidecarAgentPlugin extends Plugin {
       this.tickLimits();
       window.setTimeout(() => this.tickLimits(), 5000);
       this.archive.start();
+      this.watchVaultEdits();
       this.store.startWatching();
       this.store.refresh();
       // After a plugin reload Obsidian restores the existing panel a moment later; only create one if none comes back.
@@ -554,14 +555,14 @@ export default class SidecarAgentPlugin extends Plugin {
     const file = path.join(this.store.paths.claudeDir, `${s.st.sessionId}.jsonl`);
     let t = this.taskTrack.get(s);
     if (!t || t.file !== file) {
-      t = { file, offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), subs: new Map() };
+      t = { file, offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), subs: new Map() };
       this.taskTrack.set(s, t);
       refresh = true;
     }
     if (refresh) {
       try {
         const size = fs.statSync(file).size;
-        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), subs: new Map() });
+        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), subs: new Map() });
         if (size > t.offset) {
           const fd = fs.openSync(file, "r");
           const buf = Buffer.alloc(size - t.offset);
@@ -574,6 +575,7 @@ export default class SidecarAgentPlugin extends Plugin {
           for (const l of lines) {
             if (t.tracker.feed(l)) changed = true;
             if (t.bg.feed(l)) changed = true;
+            if (t.files.feed(l)) t.filesChanged = true;
           }
           t.changed = changed;
         }
@@ -655,9 +657,14 @@ export default class SidecarAgentPlugin extends Plugin {
       if (s.st.agent !== "claude" || !s.running) continue;
       if (s.agentState !== "busy" && s.agentState !== "waiting" && this.taskTrack.has(s)) continue;
       this.taskProgress(s, true);
-      if (this.taskTrack.get(s)?.changed) {
-        this.taskTrack.get(s).changed = false;
+      const tt = this.taskTrack.get(s);
+      if (tt?.changed) {
+        tt.changed = false;
         changed = true;
+      }
+      if (tt?.filesChanged) {
+        tt.filesChanged = false;
+        this.trigger("files-changed");
       }
     }
     if (changed) this.trigger("progress-changed");
@@ -834,6 +841,10 @@ export default class SidecarAgentPlugin extends Plugin {
       }
     }
     if (next === "done") this.archive.turnEnded(s);
+    if (next === "done" && (prev === "busy" || prev === "waiting")) {
+      const background = !this.isSeen(s);
+      window.setTimeout(() => this.reportChanges(s, background), 1500); // the session file trails the Stop hook a little
+    }
     if (this.reloadPending) this.checkReload();
     this.trigger("terminals-changed");
   }
@@ -1143,6 +1154,81 @@ export default class SidecarAgentPlugin extends Plugin {
   schedulesFor(s) {
     if (!s.running || !s.schedScan) return [];
     return pendingSchedules(s.schedScan.state);
+  }
+
+  // ---------------------------------------------------------------- files in the context and changed files
+  /** Vault changes while a session works count as changes of its current turn (sure when only one session works). */
+  watchVaultEdits() {
+    const note = (p, kind) => {
+      if (!p || (this.settings.archiveEnabled && (p + "/").startsWith(this.archive.folder + "/"))) return;
+      const busy = [...this.terminals].filter((s) => s.running && (s.agentState === "busy" || s.agentState === "waiting"));
+      if (!busy.length) return;
+      for (const s of busy) {
+        if (!s.vaultEdits || s.vaultEdits.at !== s.turnStartedAt) s.vaultEdits = { at: s.turnStartedAt, map: new Map() };
+        const old = s.vaultEdits.map.get(p);
+        s.vaultEdits.map.set(p, { kind: old?.kind === "create" && kind !== "delete" ? "create" : kind, sure: busy.length === 1 || !!old?.sure, at: Date.now() });
+      }
+      if (!this.filesTimer) this.filesTimer = window.setTimeout(() => ((this.filesTimer = 0), this.trigger("files-changed")), 500);
+    };
+    this.registerEvent(this.app.vault.on("modify", (f) => f instanceof TFile && note(f.path, "modify")));
+    this.registerEvent(this.app.vault.on("create", (f) => f instanceof TFile && note(f.path, "create")));
+    this.registerEvent(this.app.vault.on("delete", (f) => f instanceof TFile && note(f.path, "delete")));
+    this.registerEvent(this.app.vault.on("rename", (f, old) => f instanceof TFile && (note(old, "delete"), note(f.path, "create"))));
+  }
+
+  /** Files in the context of a Claude session (see FileTracker): [{abs, how, at}]. */
+  contextFiles(s) {
+    if (s?.st.agent !== "claude") return [];
+    if (!this.taskTrack.get(s)) this.taskProgress(s, true);
+    return this.taskTrack.get(s)?.files?.contextFiles() || [];
+  }
+
+  /**
+   * Files changed in the current or last turn: Claude's edit tools plus vault changes seen while it worked.
+   * [{abs, rel, kind, sure}] with rel the vault path (or null outside the vault), sure ones first.
+   */
+  turnChanges(s) {
+    if (!s?.turnStartedAt) return [];
+    const base = this.vaultPath + path.sep;
+    const rel = (abs) => (abs.startsWith(base) ? abs.slice(base.length).split(path.sep).join("/") : null);
+    const out = new Map();
+    const tr = s.st.agent === "claude" ? this.taskTrack.get(s)?.files : null;
+    for (const e of tr?.editedSince(s.turnStartedAt - 2000) || []) {
+      const r = rel(e.abs);
+      if (r && this.settings.archiveEnabled && (r + "/").startsWith(this.archive.folder + "/")) continue;
+      out.set(e.abs, { abs: e.abs, rel: r, kind: "modify", sure: true });
+    }
+    if (s.vaultEdits?.at === s.turnStartedAt) {
+      for (const [p, v] of s.vaultEdits.map) {
+        const abs = path.join(this.vaultPath, p);
+        const old = out.get(abs);
+        out.set(abs, { abs, rel: p, kind: v.kind, sure: v.sure || !!old });
+      }
+    }
+    return [...out.values()].sort((a, b) => b.sure - a.sure || (a.rel || a.abs).localeCompare(b.rel || b.abs));
+  }
+
+  /** End of a turn: refresh the lists; in the background, a notice lists the changed files (click opens one). */
+  reportChanges(s, background) {
+    if (!s.running) return;
+    if (s.st.agent === "claude") this.taskProgress(s, true);
+    this.trigger("files-changed");
+    if (!background || this.settings.notify === "off" || this.isSeen(s)) return;
+    const list = this.turnChanges(s).filter((x) => x.kind !== "delete");
+    if (!list.length) return;
+    const frag = document.createDocumentFragment();
+    frag.createDiv({ cls: "sa-files-notice-title", text: t(list.length === 1 ? "files.noticeTitle1" : "files.noticeTitle", { title: s.title(), n: list.length }) });
+    const box = frag.createDiv({ cls: "sa-files-notice" });
+    for (const x of list.slice(0, 8)) {
+      const a = box.createEl("a", { cls: "sa-files-notice-link", text: path.basename(x.abs) + (x.sure ? "" : " ?"), attr: { "aria-label": x.rel || x.abs } });
+      a.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.openTermLink({ abs: x.abs }, ev);
+      };
+    }
+    if (list.length > 8) box.createSpan({ cls: "sa-files-notice-more", text: t("files.more", { n: list.length - 8 }) });
+    new Notice(frag, 20000);
   }
 
   // ---------------------------------------------------------------- links in the terminal

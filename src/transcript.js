@@ -495,3 +495,71 @@ export class SubagentTail {
     return { steps: this.ids.size, last: this.last };
   }
 }
+
+/**
+ * Files of a Claude session, from its session file: what is in the context (read, mentioned with @,
+ * loaded at the start like CLAUDE.md, re-attached after compacting) and what Claude edited with its tools.
+ * Reading with Bash (cat, grep) is not visible here. Compacting empties the context list.
+ */
+export class FileTracker {
+  constructor() {
+    this.read = new Map(); // absolute path -> {how, at}
+    this.edited = new Map(); // absolute path -> at
+  }
+
+  /** Returns true when one of the lists changed. */
+  feed(line) {
+    if (!line.includes("file_path") && !line.includes("notebook_path") && !line.includes('"attachment"') && !line.includes("isCompactSummary")) return false;
+    let d;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    if (d.isSidechain) return false;
+    const at = toMs(d.timestamp) || 0;
+    if (d.type === "user" && d.isCompactSummary) {
+      this.read.clear();
+      return true;
+    }
+    let changed = false;
+    const add = (p, how) => {
+      if (typeof p !== "string" || !p.startsWith("/")) return;
+      const old = this.read.get(p);
+      if (old && old.how === how && old.at >= at) return;
+      this.read.set(p, { how: old?.how === "instructions" ? old.how : how, at });
+      changed = true;
+    };
+    if (d.type === "attachment") {
+      const a = d.attachment || {};
+      if (a.type === "instructions") for (const f of a.files || []) add(f.path, "instructions");
+      else if (a.type === "file") add(a.filename, "mention");
+      else if (a.type === "compact_file_reference") add(a.filename, "compact");
+      return changed;
+    }
+    if (d.type !== "assistant") return false;
+    const c = d.message?.content;
+    if (!Array.isArray(c)) return false;
+    for (const b of c) {
+      if (b.type !== "tool_use") continue;
+      const p = b.input?.file_path || b.input?.notebook_path;
+      if (b.name === "Read") add(p, "read");
+      else if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(b.name) && typeof p === "string" && p.startsWith("/")) {
+        this.edited.set(p, at);
+        add(p, "read"); // the new content is in the context too
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /** Files in the context, newest first: [{abs, how, at}]. */
+  contextFiles() {
+    return [...this.read].map(([abs, v]) => ({ abs, ...v })).sort((a, b) => b.at - a.at);
+  }
+
+  /** Files Claude edited at or after `since` (ms): [{abs, at}], newest first. */
+  editedSince(since) {
+    return [...this.edited].filter(([, at]) => at >= since).map(([abs, at]) => ({ abs, at })).sort((a, b) => b.at - a.at);
+  }
+}

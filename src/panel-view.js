@@ -1,5 +1,6 @@
 // Sidecar Agent – sidebar panel: sessions and search on top, terminal in the middle, info and actions below.
 import { ItemView, Menu, setIcon } from "obsidian";
+import os from "os";
 import { TerminalSession } from "./session";
 import { SessionReader } from "./reader";
 import { AGENTS, PLUGIN_NAME, dayBucket, hhmm, relTime } from "./util";
@@ -157,6 +158,7 @@ export class AgentPanelView extends ItemView {
     this.registerEvent(this.plugin.on("terminals-changed", () => this.renderAll()));
     this.registerEvent(this.plugin.on("context-changed", () => this.renderInfo()));
     this.registerEvent(this.plugin.on("progress-changed", () => this.renderProgress()));
+    this.registerEvent(this.plugin.on("files-changed", () => this.renderInfo()));
     this.registerEvent(this.plugin.on("dictation-changed", (st) => this.renderMic(st)));
     this.registerInterval(window.setInterval(() => this.tickElapsed(), 1000));
     this.registerEvent(this.app.workspace.on("css-change", () => this.sessions.forEach((s) => s.applyOptions())));
@@ -630,6 +632,7 @@ export class AgentPanelView extends ItemView {
     if (s.st.agent === "claude") this.renderContext(el, s);
     else if (s.st.agent === "agy") this.renderAgyContext(el, s);
     this.renderLimits(el, s);
+    this.renderFilesChip(el, s);
     const lockOn = !!this.plugin.settings.focusLock;
     const lock = el.createEl("button", { cls: `sa-lock clickable-icon${lockOn ? " is-on" : ""}`, attr: { "aria-label": lockOn ? t("lock.on") : t("lock.off") } });
     setIcon(lock, lockOn ? "lock" : "lock-open");
@@ -638,6 +641,69 @@ export class AgentPanelView extends ItemView {
       this.plugin.toggleFocusLock();
     };
     el.createSpan({ cls: "sa-info-meta", text: bits.filter(Boolean).join(" · ") });
+  }
+
+  /**
+   * Chip "12 · ✎ 3": files in the context (Claude) and files changed in the current or last turn.
+   * A click lists them; an entry opens the note (or shows the file in Finder).
+   */
+  renderFilesChip(el, s) {
+    const ctx = this.plugin.contextFiles(s);
+    const changed = this.plugin.turnChanges(s);
+    if (!ctx.length && !changed.length) return;
+    const c = el.createEl("button", { cls: "sa-chip-btn sa-files-chip" });
+    if (ctx.length) {
+      setIcon(c.createSpan({ cls: "sa-chip-icon" }), "files");
+      c.createSpan({ text: String(ctx.length) });
+    }
+    if (changed.length) {
+      setIcon(c.createSpan({ cls: "sa-chip-icon" }), "file-pen");
+      c.createSpan({ cls: "sa-files-changed", text: String(changed.length) });
+    }
+    c.setAttr("aria-label", [ctx.length ? t(ctx.length === 1 ? "files.ctxTip1" : "files.ctxTip", { n: ctx.length }) : "", changed.length ? t(changed.length === 1 ? "files.changedTip1" : "files.changedTip", { n: changed.length }) : ""].filter(Boolean).join("\n"));
+    c.onclick = (ev) => this.filesMenu(s, ev);
+  }
+
+  filesMenu(s, ev) {
+    const m = new Menu();
+    const base = this.plugin.vaultPath + "/";
+    const show = (abs) => (abs.startsWith(base) ? abs.slice(base.length) : abs.replace(os.homedir(), "~"));
+    const head = (text) => m.addItem((i) => (i.setIsLabel ? i.setTitle(text).setIsLabel(true) : i.setTitle(text).setDisabled(true)));
+    const MAX = 25;
+    const changed = this.plugin.turnChanges(s);
+    if (changed.length) {
+      head(t(this.isWorking(s) ? "files.changedNow" : "files.changedLast"));
+      const icon = { create: "file-plus", delete: "file-x", modify: "file-pen" };
+      for (const x of changed.slice(0, MAX)) {
+        m.addItem((i) => {
+          i.setTitle(`${x.rel || show(x.abs)}${x.kind === "delete" ? ` (${t("files.deleted")})` : ""}${x.sure ? "" : ` (${t("files.maybe")})`}`).setIcon(icon[x.kind] || "file-pen");
+          if (x.kind === "delete") i.setDisabled(true);
+          else i.onClick((e) => this.plugin.openTermLink({ abs: x.abs }, e));
+        });
+      }
+      if (changed.length > MAX) head(t("files.more", { n: changed.length - MAX }));
+    }
+    const ctx = this.plugin.contextFiles(s);
+    if (ctx.length) {
+      if (changed.length) m.addSeparator();
+      head(t("files.ctxHead", { n: ctx.length }));
+      const icon = { instructions: "scroll-text", mention: "at-sign", compact: "archive", read: "file-text" };
+      for (const x of ctx.slice(0, MAX)) {
+        m.addItem((i) =>
+          i
+            .setTitle(show(x.abs))
+            .setIcon(icon[x.how] || "file-text")
+            .onClick((e) => this.plugin.openTermLink({ abs: x.abs }, e)),
+        );
+      }
+      if (ctx.length > MAX) head(t("files.more", { n: ctx.length - MAX }));
+      head(t("files.ctxNote"));
+    }
+    m.showAtMouseEvent(ev);
+  }
+
+  isWorking(s) {
+    return s?.running && (s.agentState === "busy" || s.agentState === "waiting");
   }
 
   /** Note-context chip in the action row (Claude only): which note goes along with each message, click toggles. */

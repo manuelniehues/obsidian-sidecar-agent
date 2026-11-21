@@ -942,3 +942,25 @@ body.sa-resizing.sa-resizing * {
     transform: rotate(360deg);
   }
 }
+
+/* Files chip (context / changed) and the notice at the end of a background task */
+.sidecar-agent-panel .sa-files-chip .sa-files-changed {
+  color: var(--text-accent);
+}
+.sa-files-notice-title {
+  font-weight: var(--font-semibold);
+  margin-bottom: 4px;
+}
+.sa-files-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.sa-files-notice-link {
+  cursor: pointer;
+  color: var(--text-accent);
+  text-decoration: underline;
+}
+.sa-files-notice-more {
+  color: var(--text-muted);
+}
