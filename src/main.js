@@ -15,15 +15,18 @@ import SESSION_HOOK_PY from "./py/session_hook.py";
 import STATE_HOOK_PY from "./py/state_hook.py";
 import { AgentPanelView, VIEW_PANEL } from "./panel-view";
 import { isDarkTheme, obsidianAccent } from "./session";
-import { presetLabel } from "./presets";
+import { presetLabel, presetFromForm } from "./presets";
 import { ConfirmModal, EFFORTS, NewSessionModal, PresetsModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
 import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail, FileTracker, SkillTracker } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
+import { claudeFamilyVersions, claudeModelName, claudeVariants, sortAgyModels, sortClaudeModels } from "./models";
 import { t, setLanguage } from "./i18n";
 import { Dictation } from "./dictation";
+import { InboxButton } from "./inbox";
+import { PresetButtons } from "./task-button";
 
 const THEME_NAME = "sidecar-agent";
 
@@ -45,6 +48,8 @@ export default class SidecarAgentPlugin extends Plugin {
     this.archive = new ChatArchive(this);
     this.store = new SessionStore(this);
     this.dictation = new Dictation(this);
+    this.inbox = new InboxButton(this);
+    this.presetButtons = new PresetButtons(this);
 
     this.registerView(VIEW_PANEL, (leaf) => new AgentPanelView(leaf, this));
     this.addSettingTab(new SidecarSettingTab(this.app, this));
@@ -101,6 +106,7 @@ export default class SidecarAgentPlugin extends Plugin {
         return true;
       },
     });
+    this.addCommand({ id: "process-inbox", name: t("cmd.processInbox"), callback: () => this.inbox.run() });
     this.addCommand({ id: "dictate", name: t("cmd.dictate"), callback: () => this.dictation.toggle() });
     this.addCommand({ id: "toggle-focus-lock", name: t("cmd.focusLock"), callback: () => this.toggleFocusLock() });
     this.addCommand({ id: "reload-when-idle", name: t("cmd.reloadIdle"), callback: () => this.reloadWhenIdle() });
@@ -167,6 +173,8 @@ export default class SidecarAgentPlugin extends Plugin {
       this.tickLimits();
       window.setTimeout(() => this.tickLimits(), 5000);
       this.archive.start();
+      this.inbox.start();
+      this.presetButtons.refresh();
       this.watchVaultEdits();
       this.store.startWatching();
       this.store.refresh();
@@ -292,7 +300,8 @@ export default class SidecarAgentPlugin extends Plugin {
       }
       if (s.claudeTheme === "ansi") extra.theme = this.writeClaudeTheme() || (isDarkTheme() ? "dark-ansi" : "light-ansi");
       args.push("--settings", JSON.stringify(extra));
-      if (s.claudePermissionMode) args.push("--permission-mode", s.claudePermissionMode);
+      if (st.skipPermissions) args.push("--dangerously-skip-permissions");
+      else if (s.claudePermissionMode) args.push("--permission-mode", s.claudePermissionMode);
       if (st.model) args.push("--model", st.model);
       if (st.effort) args.push("--effort", st.effort);
       const name = st.name || this.settings.aliases[`claude:${st.sessionId}`];
@@ -315,9 +324,10 @@ export default class SidecarAgentPlugin extends Plugin {
       const bin = this.agyPath();
       if (!bin) throw new Error(t("err.noAgy"));
       if (s.agyRemoteControl) args.push("--remote-control");
-      if (s.agySkipPermissions) args.push("--dangerously-skip-permissions");
+      if (s.agySkipPermissions || st.skipPermissions) args.push("--dangerously-skip-permissions");
       // The default model applies to new conversations only. A resumed one keeps its model.
-      const model = st.model || (st.sessionId ? "" : this.resolveAgyDefaultModel());
+      // "Default" picked for a resumed conversation (useDefaultModel) also sets it, else agy keeps the last model.
+      const model = st.model || (st.sessionId && !st.useDefaultModel ? "" : this.resolveAgyDefaultModel());
       if (model) args.push("--model", model);
       if (st.effort) args.push("--effort", st.effort);
       if (st.sessionId) args.push("--conversation", st.sessionId);
@@ -336,13 +346,16 @@ export default class SidecarAgentPlugin extends Plugin {
 
   async modelOptions(agent) {
     if (agent === "claude") {
-      return this.settings.claudeModels
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .map((m) => [m, m]);
+      return sortClaudeModels(
+        this.settings.claudeModels
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .map((m) => [m, claudeModelName(m, this.claudeVersions())]),
+        this.claudeVersions(),
+      );
     }
-    return this.hideAgyModels(await this.allAgyModels());
+    return sortAgyModels(this.hideAgyModels(await this.allAgyModels()));
   }
 
   /** Leaves out models matching one of the comma-separated terms in "Hide models". */
@@ -1379,10 +1392,10 @@ export default class SidecarAgentPlugin extends Plugin {
     return leaf.view instanceof AgentPanelView ? leaf.view : null;
   }
 
-  async openTerminal(state) {
-    const panel = await this.activatePanel(true);
+  async openTerminal(state, { background = false } = {}) {
+    const panel = await this.activatePanel(!background);
     if (!panel) return null;
-    return panel.openSession(state);
+    return panel.openSession(state, { background });
   }
 
   saveLayoutSoon() {
@@ -1445,8 +1458,9 @@ export default class SidecarAgentPlugin extends Plugin {
       allowNewestFlash: true,
       onSavePreset: async (v) => {
         const name = presetLabel(v);
-        this.settings.presets.push({ name, agent: v.agent, model: v.model, effort: v.effort, initialPrompt: v.initialPrompt, withNote: v.withNote });
+        this.settings.presets.push(presetFromForm({ ...v, name }));
         await this.saveSettings();
+        this.presetButtons.refresh();
         new Notice(t("preset.saved", { name }));
       },
       onSubmit: (v) => this.startFromForm(v),
@@ -1454,26 +1468,43 @@ export default class SidecarAgentPlugin extends Plugin {
   }
 
   /** Starts a session from the values of the dialog or of a standard task. */
-  async startFromForm(v) {
+  async startFromForm(v, { background = false } = {}) {
     // "newest-flash" is resolved at the start, so a saved task follows new models
     const model = v.model === "newest-flash" ? newestFlashModel(await this.allAgyModels()) : v.model;
-    const s = await this.openTerminal({
-      agent: v.agent,
-      mode: "new",
-      model: model || undefined,
-      effort: v.effort || undefined,
-      name: v.name || undefined,
-      initialPrompt: v.initialPrompt || undefined,
-      notePath: v.notePath,
-    });
+    const s = await this.openTerminal(
+      {
+        agent: v.agent,
+        mode: "new",
+        model: model || undefined,
+        effort: v.effort || undefined,
+        name: v.name || undefined,
+        initialPrompt: v.initialPrompt || undefined,
+        notePath: v.notePath,
+        skipPermissions: v.skipPermissions || undefined,
+      },
+      { background },
+    );
     if (v.name && s?.st?.sessionId) this.setAlias(`${v.agent}:${s.st.sessionId}`, v.name);
     return s;
   }
 
-  startPreset(p) {
+  startPreset(p, { background = p.background } = {}) {
     const notePath = p.withNote ? this.app.workspace.getActiveFile()?.path : undefined;
-    return this.startFromForm({ ...p, notePath });
+    return this.startFromForm({ ...p, notePath }, { background: !!background });
   }
+
+  /** Task buttons shown in the panel's info row (not those placed in the status bar). */
+  panelTaskButtons() {
+    if (this.settings.taskButtonsPlace === "statusbar") return [];
+    return [this.inbox?.button, ...(this.presetButtons?.buttons.values() || [])].filter(Boolean);
+  }
+
+  /** Moves all task buttons after the "Place of the task buttons" setting changed. */
+  placeTaskButtons() {
+    this.inbox?.button?.place();
+    for (const b of this.presetButtons?.buttons.values() || []) b.place();
+  }
+
 
   /** The options button: standard tasks first; without any it goes straight to the dialog. */
   presetMenu(ev) {
@@ -1560,8 +1591,16 @@ export default class SidecarAgentPlugin extends Plugin {
 
   // ---------------------------------------------------------------- switch model / effort
   /** Short display name (claude-opus-5-5 -> opus-5-5). */
+  /** Newest Claude version per family from the session list ({ opus: "5.5", … }), for names like "Opus 5.5". */
+  claudeVersions() {
+    const ids = (this.store?.local || []).map((e) => e.model).filter(Boolean);
+    const sig = ids.length;
+    if (this._cv?.sig !== sig) this._cv = { sig, v: claudeFamilyVersions(ids) };
+    return this._cv.v;
+  }
+
   modelLabel(m) {
-    return (m || "").replace(/^claude-/, "");
+    return claudeModelName(m || "", this.claudeVersions());
   }
 
   async claudeAgents() {
@@ -1606,7 +1645,11 @@ export default class SidecarAgentPlugin extends Plugin {
       new Notice(t("notice.switchNextStart", { label }));
       return;
     }
-    const busy = s.st.agent === "claude" ? await this.claudeBusy(s.st.sessionId) : false;
+    // Antigravity has no busy query: its state comes from the transcript, plus a transcript written just now
+    const busy =
+      s.st.agent === "claude"
+        ? await this.claudeBusy(s.st.sessionId)
+        : s.agentState === "busy" || s.agentState === "waiting" || (!!s.st.sessionId && this.agyTranscriptAge(s.st.sessionId) < 8000);
     if (busy) {
       const m = new ConfirmModal(this.app, {
         title: t("modal.busyTitle"),
@@ -1618,9 +1661,11 @@ export default class SidecarAgentPlugin extends Plugin {
       if (!(await m.result)) return;
     }
     Object.assign(s.st, change);
+    if (s.st.agent === "agy" && change.model !== undefined) s.st.useDefaultModel = !change.model;
     s.term?.write(`\r\n\x1b[2m↻ ${t("term.switching", { label })}\x1b[0m\r\n`);
     s.kill();
-    s.restart();
+    // A cancelled answer goes on with the new model instead of leaving the session waiting
+    s.restart(busy ? t("prompt.continueAfterSwitch") : undefined);
     s.changed();
     this.saveLayoutSoon();
   }
@@ -1638,13 +1683,28 @@ export default class SidecarAgentPlugin extends Plugin {
         .setChecked(!cur)
         .onClick(() => this.switchModel(s, { model: "" })),
     );
-    for (const [id, label] of models)
-      m.addItem((i) =>
-        i
-          .setTitle(label)
-          .setChecked(cur === id)
-          .onClick(() => this.switchModel(s, { model: id })),
-      );
+    if (s.st.agent === "claude") {
+      // Claude: model and effort together ("Opus · High"), sorted by capability
+      const variants = claudeVariants(models, this.claudeVersions());
+      for (const v of variants)
+        m.addItem((i) =>
+          i
+            .setTitle(v.label)
+            .setChecked(cur === v.model && (s.st.effort || "") === v.effort)
+            .onClick(() => this.switchModel(s, { model: v.model, effort: v.effort })),
+        );
+      if (cur && !variants.some((v) => v.model === cur && v.effort === (s.st.effort || ""))) {
+        m.addItem((i) => i.setTitle([this.modelLabel(cur), s.st.effort].filter(Boolean).join(" · ")).setChecked(true));
+      }
+    } else {
+      for (const [id, label] of models)
+        m.addItem((i) =>
+          i
+            .setTitle(label)
+            .setChecked(cur === id)
+            .onClick(() => this.switchModel(s, { model: id })),
+        );
+    }
     m.addSeparator();
     m.addItem((i) => i.setTitle(t("model.onlyThisSession")).setDisabled(true));
     m.showAtMouseEvent(ev);

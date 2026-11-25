@@ -207,6 +207,19 @@ export class TerminalSession {
     window.setTimeout(() => this.term?.focus(), 30);
   }
 
+  /**
+   * Starts the process without showing the session (a new tab in the background). The terminal is created
+   * hidden with the size of `like` (the session in front), so the agent lays out its screen right; the first
+   * show fits it to the real size.
+   */
+  startHidden(like) {
+    if (!this.term) this.createTerm();
+    const cols = like?.term?.cols;
+    const rows = like?.term?.rows;
+    if (cols && rows) this.term.resize(cols, rows);
+    if (!this.started && !this.exited) this.start();
+  }
+
   hide() {
     this.visible = false;
     this.el?.hide();
@@ -584,6 +597,9 @@ export class TerminalSession {
     this.st.initialPrompt = prompt || undefined;
     this.st.notePath = undefined;
     this.exited = false;
+    // The old process's state says nothing about the new one; agy's transcript is read afresh
+    this.setAgentState("", "", { quiet: true });
+    this.agySeenMtime = undefined;
     this.term?.write("\r\n");
     this.start();
   }

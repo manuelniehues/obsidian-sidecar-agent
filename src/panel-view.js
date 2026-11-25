@@ -249,8 +249,13 @@ export class AgentPanelView extends ItemView {
     return s;
   }
 
-  openSession(st) {
-    return this.addSession(new TerminalSession(this.plugin, st));
+  /** background: a new tab that starts working without coming to the front. */
+  openSession(st, { background = false } = {}) {
+    if (!background || !this.active) return this.addSession(new TerminalSession(this.plugin, st));
+    const s = this.addSession(new TerminalSession(this.plugin, st), false);
+    s.startHidden(this.active);
+    this.renderAll();
+    return s;
   }
 
   activate(s) {
@@ -591,6 +596,7 @@ export class AgentPanelView extends ItemView {
     this.renderCtxChip(s);
     if (!s) {
       el.createSpan({ cls: "sa-info-muted", text: t("panel.empty") });
+      this.renderTaskButtons(el);
       return;
     }
     // Model and effort switches (apply to this session only)
@@ -634,6 +640,7 @@ export class AgentPanelView extends ItemView {
     this.renderLimits(el, s);
     this.renderFilesChip(el, s);
     this.renderSkillChip(el, s);
+    this.renderTaskButtons(el);
     const lockOn = !!this.plugin.settings.focusLock;
     const lock = el.createEl("button", { cls: `sa-lock clickable-icon${lockOn ? " is-on" : ""}`, attr: { "aria-label": lockOn ? t("lock.on") : t("lock.off") } });
     setIcon(lock, lockOn ? "lock" : "lock-open");
@@ -642,6 +649,14 @@ export class AgentPanelView extends ItemView {
       this.plugin.toggleFocusLock();
     };
     el.createSpan({ cls: "sa-info-meta", text: bits.filter(Boolean).join(" · ") });
+  }
+
+  /** Inbox and standard-task buttons, left of the lock. They keep their own element and state. */
+  renderTaskButtons(el) {
+    const list = this.plugin.panelTaskButtons?.() || [];
+    if (!list.length) return;
+    const slot = el.createSpan({ cls: "sa-task-slot" });
+    for (const b of list) slot.appendChild(b.el);
   }
 
   /**

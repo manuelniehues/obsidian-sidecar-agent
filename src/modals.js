@@ -1,7 +1,8 @@
 // Sidecar Agent – dialogs (new session, rename, confirm)
-import { Component, MarkdownRenderer, Modal, Notice, Setting } from "obsidian";
+import { Component, MarkdownRenderer, Modal, Notice, Setting, setIcon } from "obsidian";
 import { AGENTS } from "./util";
-import { presetLabel } from "./presets";
+import { presetLabel, presetFromForm } from "./presets";
+import { claudeVariants, splitVariant } from "./models";
 import { t } from "./i18n";
 
 /** "What's new" after an update: the changelog sections since the last version the user saw. */
@@ -68,6 +69,10 @@ export class NewSessionModal extends Modal {
       name: opts.name || "",
       initialPrompt: opts.initialPrompt || "",
       withNote: !!opts.withNote,
+      skipPermissions: !!opts.skipPermissions,
+      statusBar: !!opts.statusBar,
+      background: !!opts.background,
+      icon: opts.icon || "",
     };
   }
 
@@ -100,9 +105,23 @@ export class NewSessionModal extends Modal {
       .addDropdown((d) => {
         d.addOption("", defLabel);
         if (v.agent === "agy" && this.opts.allowNewestFlash) d.addOption("newest-flash", t("set.agyModelFlash"));
-        for (const [id, label] of models) d.addOption(id, label);
-        if (v.model && !models.some(([id]) => id === v.model)) d.addOption(v.model, v.model);
-        d.setValue(v.model).onChange((x) => (v.model = x));
+        if (v.agent === "claude") {
+          // Model and effort together, re-rendered so the effort field shows the choice
+          const variants = claudeVariants(models, this.plugin.claudeVersions());
+          for (const x of variants) d.addOption(x.value, x.label);
+          const curVal = v.model && v.effort ? `${v.model}|${v.effort}` : v.model;
+          if (curVal && !variants.some((x) => x.value === curVal)) d.addOption(curVal, [this.plugin.modelLabel(v.model), v.effort].filter(Boolean).join(" · "));
+          d.setValue(curVal).onChange((x) => {
+            const r = splitVariant(x);
+            v.model = r.model;
+            if (r.effort !== undefined) v.effort = r.effort;
+            this.render();
+          });
+        } else {
+          for (const [id, label] of models) d.addOption(id, label);
+          if (v.model && !models.some(([id]) => id === v.model)) d.addOption(v.model, v.model);
+          d.setValue(v.model).onChange((x) => (v.model = x));
+        }
       });
     new Setting(el).setName(t("modal.effort")).addDropdown((d) => {
       for (const id of EFFORTS) d.addOption(id, id || t("common.default"));
@@ -135,6 +154,42 @@ export class NewSessionModal extends Modal {
           .setName(t("modal.withNote"))
           .setDesc(this.opts.presetForm ? t("preset.withNoteDesc") : note.path)
           .addToggle((tg) => tg.setValue(v.withNote).onChange((x) => (v.withNote = x)));
+      }
+    }
+    if (!this.opts.lockAgent) {
+      new Setting(el)
+        .setName(t("modal.skipPermissions"))
+        .setDesc(t("modal.skipPermissionsDesc"))
+        .addToggle((tg) => tg.setValue(v.skipPermissions).onChange((x) => (v.skipPermissions = x)));
+    }
+    if (this.opts.presetForm) {
+      new Setting(el)
+        .setName(t("preset.background"))
+        .setDesc(t("preset.backgroundDesc"))
+        .addToggle((tg) => tg.setValue(v.background).onChange((x) => (v.background = x)));
+      new Setting(el)
+        .setName(t("preset.statusBar"))
+        .setDesc(t("preset.statusBarDesc"))
+        .addToggle((tg) =>
+          tg.setValue(v.statusBar).onChange((x) => {
+            v.statusBar = x;
+            this.render();
+          }),
+        );
+      if (v.statusBar) {
+        const iconSetting = new Setting(el).setName(t("preset.icon")).setDesc(t("preset.iconDesc"));
+        const preview = iconSetting.controlEl.createSpan({ cls: "sa-icon-preview" });
+        const show = () => setIcon(preview, v.icon || AGENTS[v.agent]?.icon || "play");
+        iconSetting.addText((tx) =>
+          tx
+            .setPlaceholder(AGENTS[v.agent]?.icon || "play")
+            .setValue(v.icon)
+            .onChange((x) => {
+              v.icon = x.trim();
+              show();
+            }),
+        );
+        show();
       }
     }
     const buttons = new Setting(el);
@@ -186,6 +241,7 @@ export class PresetsModal extends Modal {
 
   async change() {
     await this.plugin.saveSettings();
+    this.plugin.presetButtons?.refresh();
     this.render();
   }
 
@@ -202,7 +258,7 @@ export class PresetsModal extends Modal {
       };
       new Setting(el)
         .setName(presetLabel(p))
-        .setDesc(`${AGENTS[p.agent]?.label || p.agent} · ${model}`)
+        .setDesc([AGENTS[p.agent]?.label || p.agent, model, p.statusBar && t("preset.inStatusBar"), p.skipPermissions && t("preset.noPrompts")].filter(Boolean).join(" · "))
         .addExtraButton((b) => b.setIcon("arrow-up").setTooltip(t("preset.up")).setDisabled(i === 0).onClick(() => move(-1)))
         .addExtraButton((b) => b.setIcon("arrow-down").setTooltip(t("preset.down")).setDisabled(i === list.length - 1).onClick(() => move(1)))
         .addExtraButton((b) => b.setIcon("pencil").setTooltip(t("preset.edit")).onClick(() => this.edit(i)))
@@ -226,7 +282,7 @@ export class PresetsModal extends Modal {
       presetForm: true,
       allowNewestFlash: true,
       onSubmit: (v) => {
-        const p = { name: v.name, agent: v.agent, model: v.model, effort: v.effort, initialPrompt: v.initialPrompt, withNote: v.withNote };
+        const p = presetFromForm(v);
         if (index < 0) list.push(p);
         else list[index] = p;
         this.change();

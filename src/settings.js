@@ -4,6 +4,8 @@ import { PluginSettingTab, Setting } from "obsidian";
 import { t, locale, setLanguage } from "./i18n";
 import { DEFAULT_FONT } from "./session";
 import { AGENTS } from "./util";
+import os from "os";
+import { claudeVariants, splitVariant } from "./models";
 
 // Claude Code permission mode identifiers, shown as they are
 // Languages, each named in itself
@@ -57,6 +59,21 @@ export const DEFAULT_SETTINGS = {
   dictationKey: "", // only used when Obsidian has no secret storage (before 1.11.4)
   dictationModel: "", // "" = newest Flash model of the key
   dictationVocabulary: "",
+  taskButtonsPlace: "panel", // panel (info row, left of the lock) | statusbar
+  inboxEnabled: false, // inbox button
+  inboxFolder: "INBOX",
+  inboxAgent: "agy",
+  inboxModel: "", // "" = the agent's default model, "newest-flash" (agy), otherwise a model id
+  inboxEffort: "", // Claude: set together with the model ("Opus · High")
+  inboxPrompt: "", // "" = built-in message; {folder} is replaced by the folder
+  inboxShowCount: true,
+  inboxExtraFolders: "", // one folder outside the vault per line, counted and listed too
+  inboxSkipPermissions: false,
+  inboxBackground: true, // new tab in the background, the session in front stays
+  inboxAuto: false, // start on its own when new files arrive
+  inboxAutoHost: "", // the device the auto start was switched on on (settings may sync to other devices)
+  inboxAutoMinutes: 30,
+  inboxAutoHours: "", // "08:00-20:00", empty = any time
   presets: [], // standard tasks: {name, agent, model, effort, initialPrompt, withNote}
   agyIds: [], // Antigravity conversations started in this vault (agy often stores no working folder)
 };
@@ -450,6 +467,175 @@ export class SidecarSettingTab extends PluginSettingTab {
           await p.saveSettings();
         }),
       );
+
+    // ---------------------------------------------------------------- inbox
+    new Setting(el).setName(t("set.inboxHeading")).setHeading();
+    new Setting(el)
+      .setName(t("set.inbox"))
+      .setDesc(t("set.inboxDesc"))
+      .addToggle((tg) =>
+        tg.setValue(!!s.inboxEnabled).onChange(async (v) => {
+          s.inboxEnabled = v;
+          await save();
+          p.inbox.refresh();
+        }),
+      );
+    new Setting(el)
+      .setName(t("set.taskPlace"))
+      .setDesc(t("set.taskPlaceDesc"))
+      .addDropdown((d) =>
+        d
+          .addOption("panel", t("set.taskPlacePanel"))
+          .addOption("statusbar", t("set.taskPlaceBar"))
+          .setValue(s.taskButtonsPlace || "panel")
+          .onChange(async (v) => {
+            s.taskButtonsPlace = v;
+            await save();
+            p.placeTaskButtons();
+          }),
+      );
+    new Setting(el)
+      .setName(t("set.inboxFolder"))
+      .setDesc(t("set.inboxFolderDesc"))
+      .addText((tx) =>
+        tx
+          .setPlaceholder("INBOX")
+          .setValue(s.inboxFolder || "")
+          .onChange(async (v) => {
+            s.inboxFolder = v.trim().replace(/^\/+|\/+$/g, "") || "INBOX";
+            await save();
+            p.inbox.update();
+          }),
+      );
+    new Setting(el).setName(t("set.inboxAgent")).addDropdown((d) =>
+      d
+        .addOption("claude", AGENTS.claude.label)
+        .addOption("agy", AGENTS.agy.label)
+        .setValue(s.inboxAgent || "agy")
+        .onChange(async (v) => {
+          s.inboxAgent = v;
+          s.inboxModel = "";
+          s.inboxEffort = "";
+          await save();
+          p.inbox.update();
+          this.display();
+        }),
+    );
+    new Setting(el)
+      .setName(t("set.inboxModel"))
+      .setDesc(t("set.inboxModelDesc"))
+      .addDropdown(async (d) => {
+        const agent = s.inboxAgent || "agy";
+        d.addOption("", t("set.inboxModelDefault"));
+        if (agent === "agy") d.addOption("newest-flash", t("set.agyModelFlash"));
+        const models = await p.modelOptions(agent);
+        let cur = s.inboxModel || "";
+        if (agent === "claude") {
+          for (const x of claudeVariants(models, p.claudeVersions())) d.addOption(x.value, x.label);
+          if (cur && s.inboxEffort) cur = `${cur}|${s.inboxEffort}`;
+        } else {
+          for (const [id, label] of models) d.addOption(id, label);
+        }
+        if (cur && !d.selectEl.querySelector(`option[value="${CSS.escape(cur)}"]`)) d.addOption(cur, cur.replace("|", " · "));
+        d.setValue(cur);
+        d.onChange(async (v) => {
+          const r = splitVariant(v);
+          s.inboxModel = r.model || "";
+          s.inboxEffort = r.effort || "";
+          await save();
+        });
+      });
+    new Setting(el)
+      .setName(t("set.inboxPrompt"))
+      .setDesc(t("set.inboxPromptDesc"))
+      .addTextArea((ta) => {
+        ta.setPlaceholder(t("inbox.defaultPrompt"))
+          .setValue(s.inboxPrompt || "")
+          .onChange(async (v) => {
+            s.inboxPrompt = v;
+            await save();
+          });
+        ta.inputEl.rows = 4;
+        ta.inputEl.addClass("sidecar-agent-inbox-prompt");
+      });
+    new Setting(el)
+      .setName(t("set.inboxExtra"))
+      .setDesc(t("set.inboxExtraDesc"))
+      .addTextArea((ta) => {
+        ta.setPlaceholder("~/Downloads/Inbox")
+          .setValue(s.inboxExtraFolders || "")
+          .onChange(async (v) => {
+            s.inboxExtraFolders = v;
+            await save();
+          });
+        ta.inputEl.rows = 2;
+        ta.inputEl.addClass("sidecar-agent-inbox-prompt");
+        ta.inputEl.addEventListener("blur", () => p.inbox.tick());
+      });
+    new Setting(el)
+      .setName(t("preset.background"))
+      .setDesc(t("set.inboxBackgroundDesc"))
+      .addToggle((tg) =>
+        tg.setValue(s.inboxBackground !== false).onChange(async (v) => {
+          s.inboxBackground = v;
+          await save();
+        }),
+      );
+    new Setting(el)
+      .setName(t("modal.skipPermissions"))
+      .setDesc(t("set.inboxSkipDesc"))
+      .addToggle((tg) =>
+        tg.setValue(!!s.inboxSkipPermissions).onChange(async (v) => {
+          s.inboxSkipPermissions = v;
+          await save();
+        }),
+      );
+    const host = os.hostname();
+    new Setting(el)
+      .setName(t("set.inboxAuto"))
+      .setDesc(
+        s.inboxAuto && s.inboxAutoHost && s.inboxAutoHost !== host
+          ? t("set.inboxAutoOther", { host: s.inboxAutoHost })
+          : t("set.inboxAutoDesc", { host }),
+      )
+      .addToggle((tg) =>
+        tg.setValue(!!s.inboxAuto && s.inboxAutoHost === host).onChange(async (v) => {
+          await p.inbox.setAuto(v);
+          this.display();
+        }),
+      );
+    new Setting(el)
+      .setName(t("set.inboxAutoMinutes"))
+      .setDesc(t("set.inboxAutoMinutesDesc"))
+      .addText((tx) =>
+        tx
+          .setPlaceholder("30")
+          .setValue(String(s.inboxAutoMinutes ?? 30))
+          .onChange(async (v) => {
+            const n = parseInt(v, 10);
+            s.inboxAutoMinutes = Number.isFinite(n) && n >= 5 ? n : 30;
+            await save();
+          }),
+      );
+    new Setting(el)
+      .setName(t("set.inboxAutoHours"))
+      .setDesc(t("set.inboxAutoHoursDesc"))
+      .addText((tx) =>
+        tx
+          .setPlaceholder("08:00-20:00")
+          .setValue(s.inboxAutoHours || "")
+          .onChange(async (v) => {
+            s.inboxAutoHours = v.trim();
+            await save();
+          }),
+      );
+    new Setting(el).setName(t("set.inboxCount")).addToggle((tg) =>
+      tg.setValue(s.inboxShowCount !== false).onChange(async (v) => {
+        s.inboxShowCount = v;
+        await save();
+        p.inbox.update();
+      }),
+    );
 
     // ---------------------------------------------------------------- terminal
     new Setting(el).setName(t("set.terminalHeading")).setHeading();

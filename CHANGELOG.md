@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.19.0
+
+- New inbox button next to the lock in the info row (or in Obsidian's status bar, see "Place of the buttons"). One click starts a session that processes your inbox folder, without a dialog, as a new tab in the background: the session you are in stays in front (switch off with "Start in the background"). Set the folder, agent, model and message under "Inbox button"; the message can use {folder}, {folders} and {files} (the list of files). The number on the button counts the files in the folder, plus optional folders outside the vault. Right-click for "process now", "show the folder" and the settings. Command: "Process the inbox".
+- The inbox can start on its own when new files arrive: in the background, after the files have settled for two minutes, with a minimum gap between runs and an optional time window such as 08:00-20:00. It runs on the device where you switched it on only, so two computers never process the same files.
+- Standard tasks can get a button of their own ("Show as a button", with a Lucide icon of your choice) and can start in the background as a new tab ("Start in the background").
+- Task buttons show their run: spinning while working, a question mark while waiting for your answer, a check mark for ten seconds when done (then the icon is back), a warning when files are left or the session ended early, which stays until you open the session. While a run works or needs a look, a click opens its session instead of starting a new one.
+- New option "Without permission prompts" for a single session (dialog, standard tasks, inbox): starts Claude or Antigravity with --dangerously-skip-permissions for that session only.
+- Fixed: switching the model of a working Antigravity session restarted it without asking and left it waiting. It now asks first like Claude, and the session goes on with the new model by itself.
+- Fixed: "Default" in the model menu of a resumed Antigravity conversation kept its last model; it now starts with your default model.
+- Fixed: after a restart a session kept the "working" state of the old process, which could hold off "Reload when idle" forever.
+- Models are sorted by capability: Antigravity strongest model first, high before medium effort; Claude Fable, Opus, Opus plan, Sonnet, Haiku. Claude pickers offer each model with high and medium effort ("Opus 5.5 · High"), and Claude names always show the version, taken from the newest model your sessions used.
+
 ## 1.18.0
 
 - New skill chip next to the files chip (Claude): it names the skill loaded last in the session, "+n" when there are more, whether it was typed as /name or called by Claude. A click lists them with the time they were loaded; an entry opens the skill (the vault note SKILLS/<name>.md when there is one, else its SKILL.md). Compacting starts the list over.
