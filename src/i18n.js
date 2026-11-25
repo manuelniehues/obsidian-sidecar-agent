@@ -307,7 +307,7 @@ const EN = {
   "set.colorsMuted": "Muted (plugin palette)",
   "set.colorsClaude": "Claude's own colors",
   "set.autoResume": "Resume after usage limit",
-  "set.autoResumeDesc": "When a Claude session hits the usage limit, send a message after the reset so it continues. Obsidian and the session must stay open.",
+  "set.autoResumeDesc": "When a Claude or Antigravity session hits the usage limit, send a message after the reset so it continues. Obsidian and the session must stay open.",
   "set.autoResumeMessage": "Resume message",
   "set.autoResumeMessageDesc": "Empty = the default text shown as placeholder.",
   "set.pathTo": "Path to {bin}",
@@ -745,7 +745,7 @@ const DE = {
   "set.colorsClaude": "Claude-Standardfarben",
   "set.autoResume": "Nach dem Nutzungslimit fortsetzen",
   "set.autoResumeDesc":
-    "Erreicht eine Claude-Session das Nutzungslimit, schickt das Plugin nach dem Reset eine Nachricht, damit sie weitermacht. Obsidian und die Session müssen offen bleiben.",
+    "Erreicht eine Claude- oder Antigravity-Session das Nutzungslimit, schickt das Plugin nach dem Reset eine Nachricht, damit sie weitermacht. Obsidian und die Session müssen offen bleiben.",
   "set.autoResumeMessage": "Text zum Fortsetzen",
   "set.autoResumeMessageDesc": "Leer = der als Platzhalter gezeigte Standardtext.",
   "set.pathTo": "Pfad zu {bin}",

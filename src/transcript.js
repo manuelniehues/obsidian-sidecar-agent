@@ -58,6 +58,43 @@ export function findUsageLimit(lines) {
 }
 
 /**
+ * SQL for an Antigravity conversation database (conversations/<id>.db): the newest input (14), answer (15)
+ * and error (17) steps, whether the error is a used-up quota, and the reset time as hex (the payload is
+ * protobuf, so the text is cut out raw). agy writes these error steps only here, not into transcript.jsonl.
+ */
+export const AGY_QUOTA_SQL =
+  "select idx, step_type, instr(step_payload, cast('QUOTA_EXHAUSTED' as blob)) > 0, " +
+  "hex(substr(step_payload, nullif(instr(step_payload, cast('quotaResetTimeStamp' as blob)), 0), 64)), " +
+  "hex(substr(step_payload, nullif(instr(step_payload, cast('Resets in ' as blob)), 0), 40)) " +
+  "from steps where step_type in (14, 15, 17) order by idx desc limit 3";
+
+/** Hex from sqlite to text (latin1 is enough for the ASCII parts that matter). */
+function unhex(h) {
+  return h ? Buffer.from(h, "hex").toString("latin1") : "";
+}
+
+/**
+ * Result of AGY_QUOTA_SQL (tab-separated) to {idx, resetAt} when the conversation stopped at a used-up
+ * quota and nothing followed (no new input, no answer), otherwise null. now: for "Resets in 155h1m19s".
+ */
+export function agyQuotaStop(stdout, now = Date.now()) {
+  const first = String(stdout || "")
+    .split("\n")
+    .find((l) => l.trim());
+  if (!first) return null;
+  const [idx, type, quota, tsHex, inHex] = first.split("\t");
+  if (Number(type) !== 17 || quota !== "1") return null;
+  let resetAt = null;
+  const m = unhex(tsHex).match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/);
+  if (m) resetAt = Date.parse(m[1]);
+  if (!resetAt) {
+    const r = unhex(inHex).match(/Resets in (?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/);
+    if (r && (r[1] || r[2] || r[3])) resetAt = now + ((Number(r[1] || 0) * 60 + Number(r[2] || 0)) * 60 + Number(r[3] || 0)) * 1000;
+  }
+  return { idx: Number(idx), resetAt };
+}
+
+/**
  * End of an Antigravity transcript (brain/<id>/.system_generated/logs/transcript.jsonl):
  * {at, used_tokens, final, text} or null. used_tokens = input_tokens + cache_read_tokens of the last model
  * response (agy reports no window size). final = the last step is a finished model response without tool
@@ -560,7 +597,10 @@ export class FileTracker {
 
   /** Files Claude edited at or after `since` (ms): [{abs, at}], newest first. */
   editedSince(since) {
-    return [...this.edited].filter(([, at]) => at >= since).map(([abs, at]) => ({ abs, at })).sort((a, b) => b.at - a.at);
+    return [...this.edited]
+      .filter(([, at]) => at >= since)
+      .map(([abs, at]) => ({ abs, at }))
+      .sort((a, b) => b.at - a.at);
   }
 }
 

@@ -234,14 +234,27 @@ body.sa-resizing.sa-resizing * {
   display: flex;
   gap: 4px;
   padding: 4px 6px;
+  overflow: hidden;
+}
+/* Tabs shrink first, then scroll; the view switch sits outside this strip */
+.sidecar-agent-panel .sa-tabs-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+.sidecar-agent-panel .sa-tabs-scroll::-webkit-scrollbar {
+  display: none;
 }
 .sidecar-agent-panel .sa-tab {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   max-width: 200px;
+  min-width: 88px;
   padding: 4px 5px 4px 9px;
   border-radius: var(--radius-s);
   font-size: var(--font-ui-small);
@@ -249,7 +262,7 @@ body.sa-resizing.sa-resizing * {
   background: transparent;
   border: 1px solid var(--background-modifier-border);
   cursor: pointer;
-  flex: none;
+  flex: 0 1 auto;
 }
 /* Same look as the new-session buttons in the toolbar, active tab tinted like mod-cta */
 .sidecar-agent-panel .sa-tab:hover {
@@ -966,24 +979,82 @@ body.sa-resizing.sa-resizing * {
 }
 
 /* Inbox settings */
-.sidecar-agent-inbox-prompt { width: 100%; min-height: 3em; }
+.sidecar-agent-inbox-prompt {
+  width: 100%;
+  min-height: 3em;
+}
 
 /* Task buttons (inbox and standard tasks): in the panel's info row left of the lock, or in the status bar */
-.sidecar-agent-panel .sa-task-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
-.sidecar-agent-panel .sa-task-slot + .sa-lock { margin-left: 0; }
-.sidecar-agent-task { display: inline-flex; align-items: center; gap: 3px; padding: 2px; height: auto; color: var(--text-faint); cursor: pointer; }
-.sidecar-agent-task:hover { color: var(--text-normal); }
-.status-bar .sidecar-agent-task { color: inherit; padding: 0; }
-.sidecar-agent-task-icon { display: inline-flex; }
-.sidecar-agent-task-icon svg { width: 13px; height: 13px; }
-.sidecar-agent-task-badge { font-size: var(--font-ui-smaller); font-variant-numeric: tabular-nums; color: var(--text-accent); font-weight: var(--font-semibold); line-height: 1; }
-.sidecar-agent-task-badge:empty { display: none; }
-.sidecar-agent-task.is-empty { opacity: 0.7; }
-.sidecar-agent-task[data-phase="running"] .sidecar-agent-task-icon svg { animation: sa-task-spin 1.2s linear infinite; }
-.sidecar-agent-task[data-phase="running"] .sidecar-agent-task-icon { color: var(--interactive-accent); }
+.sidecar-agent-panel .sa-task-slot {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.sidecar-agent-panel .sa-task-slot + .sa-lock {
+  margin-left: 0;
+}
+.sidecar-agent-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  height: auto;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.sidecar-agent-task:hover {
+  color: var(--text-normal);
+}
+.status-bar .sidecar-agent-task {
+  color: inherit;
+  padding: 0;
+}
+.sidecar-agent-task-icon {
+  display: inline-flex;
+}
+.sidecar-agent-task-icon svg {
+  width: 13px;
+  height: 13px;
+}
+.sidecar-agent-task-badge {
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-accent);
+  font-weight: var(--font-semibold);
+  line-height: 1;
+}
+.sidecar-agent-task-badge:empty {
+  display: none;
+}
+.sidecar-agent-task.is-empty {
+  opacity: 0.7;
+}
+.sidecar-agent-task[data-phase="running"] .sidecar-agent-task-icon svg {
+  animation: sa-task-spin 1.2s linear infinite;
+}
+.sidecar-agent-task[data-phase="running"] .sidecar-agent-task-icon {
+  color: var(--interactive-accent);
+}
 .sidecar-agent-task[data-phase="waiting"] .sidecar-agent-task-icon,
-.sidecar-agent-task[data-phase="warning"] .sidecar-agent-task-icon { color: var(--color-orange); }
-.sidecar-agent-task[data-phase="done"] .sidecar-agent-task-icon { color: var(--color-green); }
-@keyframes sa-task-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .sidecar-agent-task[data-phase="running"] .sidecar-agent-task-icon svg { animation: none; } }
-.sa-icon-preview { display: inline-flex; margin-right: 8px; color: var(--text-muted); }
+.sidecar-agent-task[data-phase="warning"] .sidecar-agent-task-icon {
+  color: var(--color-orange);
+}
+.sidecar-agent-task[data-phase="done"] .sidecar-agent-task-icon {
+  color: var(--color-green);
+}
+@keyframes sa-task-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidecar-agent-task[data-phase="running"] .sidecar-agent-task-icon svg {
+    animation: none;
+  }
+}
+.sa-icon-preview {
+  display: inline-flex;
+  margin-right: 8px;
+  color: var(--text-muted);
+}

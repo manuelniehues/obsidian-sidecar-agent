@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.0
+
+- Antigravity sessions now resume by themselves after a used-up quota, like Claude sessions: when agy stops with "Individual quota reached", the plugin sends the resume message one minute after the reset time agy reports. The info row shows "⏳ Resume hh:mm", a click cancels. Obsidian and the session must stay open; switching off "Resume after usage limit" turns it off for both agents.
+- Fixed: with four or more open tabs, the Terminal / Read switch slid out of the panel on the right. Tabs now shrink first and then scroll in their own strip, the switch always stays visible, and the active tab is scrolled into view.
+
 ## 1.19.0
 
 - New inbox button next to the lock in the info row (or in Obsidian's status bar, see "Place of the buttons"). One click starts a session that processes your inbox folder, without a dialog, as a new tab in the background: the session you are in stays in front (switch off with "Start in the background"). Set the folder, agent, model and message under "Inbox button"; the message can use {folder}, {folders} and {files} (the list of files). The number on the button counts the files in the folder, plus optional folders outside the vault. Right-click for "process now", "show the folder" and the settings. Command: "Process the inbox".

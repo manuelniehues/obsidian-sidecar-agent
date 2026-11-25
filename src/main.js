@@ -19,7 +19,7 @@ import { presetLabel, presetFromForm } from "./presets";
 import { ConfirmModal, EFFORTS, NewSessionModal, PresetsModal, TextModal, WhatsNewModal } from "./modals";
 import CHANGELOG from "../CHANGELOG.md";
 import { changelogSince, compareVersions } from "./changelog";
-import { parseResetText, toMs, findUsageLimit, agyTail, TaskTracker, BackgroundTracker, SubagentTail, FileTracker, SkillTracker } from "./transcript";
+import { parseResetText, toMs, findUsageLimit, agyTail, agyQuotaStop, AGY_QUOTA_SQL, TaskTracker, BackgroundTracker, SubagentTail, FileTracker, SkillTracker } from "./transcript";
 import { SidecarSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { AGENTS, AGY_DB, AGY_DIR, CACHE_DIR, SUPPORT_DIR, agyFirstInput, agyLastConversation, mention, resolveBin, run, uuid, newestFlashModel, vaultHash } from "./util";
 import { claudeFamilyVersions, claudeModelName, claudeVariants, sortAgyModels, sortClaudeModels } from "./models";
@@ -60,11 +60,15 @@ export default class SidecarAgentPlugin extends Plugin {
     this.addCommand({ id: "focus-terminal", name: t("cmd.focusTerminal"), callback: async () => (await this.activatePanel(true))?.focusInput() });
     this.addCommand({ id: "new-claude", name: t("cmd.newClaude"), callback: () => this.startNew({ agent: "claude" }) });
     this.addCommand({ id: "new-agy", name: t("cmd.newAgy"), callback: () => this.startNew({ agent: "agy" }) });
-    this.addCommand({ id: "write-chat-notes", name: t("cmd.archiveNow"), checkCallback: (checking) => {
-      if (!this.archive.enabled) return false;
-      if (!checking) this.archive.run({ report: true });
-      return true;
-    } });
+    this.addCommand({
+      id: "write-chat-notes",
+      name: t("cmd.archiveNow"),
+      checkCallback: (checking) => {
+        if (!this.archive.enabled) return false;
+        if (!checking) this.archive.run({ report: true });
+        return true;
+      },
+    });
     this.addCommand({ id: "new-with-options", name: t("cmd.newOptions"), callback: () => this.openNewSessionModal({}) });
     this.addCommand({
       id: "send-note",
@@ -575,7 +579,8 @@ export default class SidecarAgentPlugin extends Plugin {
     if (refresh) {
       try {
         const size = fs.statSync(file).size;
-        if (size < t.offset) Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), skills: new SkillTracker(), subs: new Map() });
+        if (size < t.offset)
+          Object.assign(t, { offset: 0, rest: "", tracker: new TaskTracker(), bg: new BackgroundTracker(), files: new FileTracker(), skills: new SkillTracker(), subs: new Map() });
         if (size > t.offset) {
           const fd = fs.openSync(file, "r");
           const buf = Buffer.alloc(size - t.offset);
@@ -806,6 +811,7 @@ export default class SidecarAgentPlugin extends Plugin {
     if ([...this.terminals].some((s) => s.st.agent === "agy")) this.refreshAgyLimits();
     for (const s of this.terminals) if (s.st.agent === "claude" && s.running) this.scanSchedules(s);
     if (this.settings.autoResume) for (const s of this.terminals) if (s.st.agent === "claude" && s.running) this.checkUsageLimit(s);
+    if (this.settings.autoResume) for (const s of this.terminals) if (s.st.agent === "agy" && s.running && s.st.sessionId) this.checkAgyUsageLimit(s);
     this.verifyBusy();
     this.trigger("terminals-changed");
   }
@@ -954,11 +960,11 @@ export default class SidecarAgentPlugin extends Plugin {
     );
     if (s.st.agent === "claude")
       m.addItem((i) =>
-      i
-        .setTitle(t("menu.compactFocus"))
-        .setIcon("fold-vertical")
-        .onClick(() => this.compactWithFocus(s)),
-    );
+        i
+          .setTitle(t("menu.compactFocus"))
+          .setIcon("fold-vertical")
+          .onClick(() => this.compactWithFocus(s)),
+      );
     m.showAtMouseEvent(ev);
   }
 
@@ -1109,6 +1115,51 @@ export default class SidecarAgentPlugin extends Plugin {
     this.trigger("terminals-changed");
   }
 
+  /**
+   * Antigravity does not resume after a used-up quota at all. Its error step is only in the conversation
+   * database (conversations/<id>.db), not in transcript.jsonl: read it there and resume after the reset.
+   */
+  async checkAgyUsageLimit(s) {
+    const key = s.key;
+    if (!key || this.pending.has(key) || s.agyQuotaCheck) return;
+    const db = path.join(AGY_DIR, "conversations", `${s.st.sessionId}.db`);
+    if (!fs.existsSync(db)) return;
+    s.agyQuotaCheck = true;
+    let stop = null;
+    try {
+      // While agy writes, the -wal file exists and -readonly reads it along. Without it nothing is
+      // pending, and immutable opens the file without the -shm that -readonly cannot create.
+      const args = fs.existsSync(`${db}-wal`) ? ["-readonly", db] : [`file:${db}?immutable=1`];
+      const { stdout } = await run("/usr/bin/sqlite3", ["-separator", "\t", ...args, AGY_QUOTA_SQL], { timeout: 5000 });
+      stop = agyQuotaStop(stdout);
+    } catch (e) {
+      console.warn("[sidecar-agent] agy quota check", e);
+    } finally {
+      s.agyQuotaCheck = false;
+    }
+    if (!stop || !this.terminals.has(s) || this.pending.has(key)) return;
+    const mark = `${key}@agy${stop.idx}`;
+    if (this.handledLimits?.has(mark)) return;
+    let resetAt = stop.resetAt;
+    if (!resetAt) {
+      await this.refreshAgyLimits();
+      const lim = this.limitsFor(s);
+      resetAt = lim?.fiveHour?.used >= 100 ? lim.fiveHour.resetsAt : lim?.week?.used >= 100 ? lim.week.resetsAt : null;
+    }
+    if (!resetAt) return;
+    const at = Math.max(resetAt + 60000, Date.now() + 5000);
+    const timer = window.setTimeout(() => this.resumeAfterLimit(s, key), at - Date.now());
+    this.pending.set(key, { at, timer, limitAt: Date.now() });
+    this.handledLimits = this.handledLimits || new Set();
+    this.handledLimits.add(mark);
+    this.trigger("terminals-changed");
+  }
+
+  /** Antigravity has no busy query: its state comes from the transcript, plus a transcript written just now. */
+  agyBusy(s) {
+    return s.agentState === "busy" || s.agentState === "waiting" || (!!s.st.sessionId && this.agyTranscriptAge(s.st.sessionId) < 8000);
+  }
+
   cancelPending(s) {
     const p = this.pending.get(s.key);
     if (!p) return;
@@ -1122,7 +1173,8 @@ export default class SidecarAgentPlugin extends Plugin {
     this.pending.delete(key);
     this.trigger("terminals-changed");
     if (!this.terminals.has(s) || !s.running) return;
-    if (await this.claudeBusy(s.st.sessionId)) return; // already working again
+    // already working again
+    if (s.st.agent === "claude" ? await this.claudeBusy(s.st.sessionId) : this.agyBusy(s)) return;
     s.submit(this.settings.autoResumeMessage || t("prompt.autoResume"));
     new Notice(t("notice.autoResumed", { title: s.title() }));
   }
@@ -1505,18 +1557,32 @@ export default class SidecarAgentPlugin extends Plugin {
     for (const b of this.presetButtons?.buttons.values() || []) b.place();
   }
 
-
   /** The options button: standard tasks first; without any it goes straight to the dialog. */
   presetMenu(ev) {
     const list = this.settings.presets;
     if (!list.length) return this.openNewSessionModal({});
     const m = new Menu();
     for (const p of list) {
-      m.addItem((i) => i.setTitle(presetLabel(p)).setIcon(AGENTS[p.agent]?.icon || "play").onClick(() => this.startPreset(p)));
+      m.addItem((i) =>
+        i
+          .setTitle(presetLabel(p))
+          .setIcon(AGENTS[p.agent]?.icon || "play")
+          .onClick(() => this.startPreset(p)),
+      );
     }
     m.addSeparator();
-    m.addItem((i) => i.setTitle(t("preset.options")).setIcon("sliders-horizontal").onClick(() => this.openNewSessionModal({})));
-    m.addItem((i) => i.setTitle(t("preset.manage")).setIcon("list-checks").onClick(() => new PresetsModal(this).open()));
+    m.addItem((i) =>
+      i
+        .setTitle(t("preset.options"))
+        .setIcon("sliders-horizontal")
+        .onClick(() => this.openNewSessionModal({})),
+    );
+    m.addItem((i) =>
+      i
+        .setTitle(t("preset.manage"))
+        .setIcon("list-checks")
+        .onClick(() => new PresetsModal(this).open()),
+    );
     m.showAtMouseEvent(ev);
   }
 
@@ -1645,11 +1711,7 @@ export default class SidecarAgentPlugin extends Plugin {
       new Notice(t("notice.switchNextStart", { label }));
       return;
     }
-    // Antigravity has no busy query: its state comes from the transcript, plus a transcript written just now
-    const busy =
-      s.st.agent === "claude"
-        ? await this.claudeBusy(s.st.sessionId)
-        : s.agentState === "busy" || s.agentState === "waiting" || (!!s.st.sessionId && this.agyTranscriptAge(s.st.sessionId) < 8000);
+    const busy = s.st.agent === "claude" ? await this.claudeBusy(s.st.sessionId) : this.agyBusy(s);
     if (busy) {
       const m = new ConfirmModal(this.app, {
         title: t("modal.busyTitle"),
@@ -1784,7 +1846,11 @@ export default class SidecarAgentPlugin extends Plugin {
   async detectAgyConversation(view, lastBefore) {
     const started = view.startedAt;
     const vaultUri = `file://${this.vaultPath}`;
-    const norm = (x) => String(x || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const norm = (x) =>
+      String(x || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80);
     const want = norm(view.agyPrompt);
     const others = () => [...this.terminals].filter((v) => v !== view && v.st.agent === "agy");
     const fits = (id) => {
@@ -1823,5 +1889,4 @@ export default class SidecarAgentPlugin extends Plugin {
       }
     }
   }
-
 }

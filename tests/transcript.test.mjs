@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { FIX } from "./helpers.mjs";
 import { presetLabel } from "../src/presets.js";
-import { agyTail, creditsShown, findUsageLimit, ingestLine, osc52Text, parseResetText, toMs, touchesFile } from "../src/transcript.js";
+import { agyQuotaStop, agyTail, creditsShown, findUsageLimit, ingestLine, osc52Text, parseResetText, toMs, touchesFile } from "../src/transcript.js";
 
 const claudeLines = fs.readFileSync(path.join(FIX, "claude", "11111111-2222-3333-4444-555555555555.jsonl"), "utf8").split("\n").filter(Boolean);
 
@@ -246,4 +246,22 @@ test("wait estimate of background commands: sleep, polling loops, timeout", asyn
   tr.feed(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "b", name: "Bash", input: { command: "sleep 600", run_in_background: true } }] } }));
   tr.feed(JSON.stringify({ type: "user", toolUseResult: { backgroundTaskId: "w1" }, message: { content: [{ type: "tool_result", tool_use_id: "b", content: "Command running in background with ID: w1." }] } }));
   assert.deepEqual(tr.jobs()[0].wait, { seconds: 600, exact: true });
+});
+
+test("Antigravity: used-up quota at the end of the conversation database", () => {
+  const hex = (x) => Buffer.from(x, "latin1").toString("hex").toUpperCase();
+  const ts = hex('quotaResetTimeStamp": "2026-10-12T16:27:58Z",\n  "x');
+  const inText = hex("Resets in 155h1m19s.\u0012\u0001");
+  // last step is the quota error: resume at the time stamp
+  let r = agyQuotaStop(`5\t17\t1\t${ts}\t${inText}\n4\t14\t0\t\t\n3\t17\t1\t${ts}\t\n`);
+  assert.deepEqual(r, { idx: 5, resetAt: Date.parse("2026-10-12T16:27:58Z") });
+  // without a time stamp: "Resets in …" from now
+  r = agyQuotaStop(`5\t17\t1\t\t${inText}\n`, 1000);
+  assert.equal(r.resetAt, 1000 + (155 * 3600 + 60 + 19) * 1000);
+  // a new input or an answer after the error: nothing to do
+  assert.equal(agyQuotaStop(`351\t14\t0\t\t\n350\t17\t1\t${ts}\t\n`), null);
+  assert.equal(agyQuotaStop(`352\t15\t0\t\t\n350\t17\t1\t${ts}\t\n`), null);
+  // other errors (overloaded, malformed tool call) are no quota stop
+  assert.equal(agyQuotaStop(`40\t17\t0\t\t\n`), null);
+  assert.equal(agyQuotaStop(""), null);
 });

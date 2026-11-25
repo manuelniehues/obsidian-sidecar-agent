@@ -450,7 +450,9 @@ export class AgentPanelView extends ItemView {
         j.steps ? t("progress.steps", { n: j.steps }) : "",
         j.last ? t("progress.lastTool", { tool: j.last }) : "",
         j.wait?.every ? t("progress.every", { n: j.wait.every }) : "",
-      ].filter(Boolean).join(", ");
+      ]
+        .filter(Boolean)
+        .join(", ");
       tip.push(`• ${kind[j.kind] || kind.other}: ${j.label}${extra ? ` (${extra})` : ""}`);
     }
   }
@@ -506,7 +508,10 @@ export class AgentPanelView extends ItemView {
     const when = (ms) => {
       const d = new Date(ms);
       const today = new Date().toDateString() === d.toDateString();
-      return d.toLocaleString(locale(), today ? { hour: "2-digit", minute: "2-digit" } : { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleString(
+        locale(),
+        today ? { hour: "2-digit", minute: "2-digit" } : { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" },
+      );
     };
     const short = (x) => (x.length > 70 ? `${x.slice(0, 69)}…` : x);
     const lines = list.map((x) =>
@@ -519,11 +524,14 @@ export class AgentPanelView extends ItemView {
 
   renderTabs() {
     const el = this.tabsEl;
+    const keepScroll = el.querySelector(".sa-tabs-scroll")?.scrollLeft || 0;
     el.empty();
     el.toggle(this.sessions.length > 0);
     this.emptyEl.toggle(this.sessions.length === 0);
     // Terminal ↔ reading view switch (right end of the tab bar)
     // Only Claude has a reading view; other agents get no switch.
+    // Tabs scroll in their own strip, so the switch stays visible however many tabs are open.
+    const strip = el.createDiv({ cls: "sa-tabs-scroll" });
     const a = this.active;
     if (a && a.st.agent === "claude") {
       const reading = a.viewMode === "reader";
@@ -538,7 +546,7 @@ export class AgentPanelView extends ItemView {
       mk("reader", "book-open", t("view.reader"), t("view.readerTip"));
     }
     for (const s of this.sessions) {
-      const tab = el.createDiv({ cls: `sa-tab sa-${s.st.agent}${s === this.active ? " is-active" : ""}${s.running ? " is-running" : ""}` });
+      const tab = strip.createDiv({ cls: `sa-tab sa-${s.st.agent}${s === this.active ? " is-active" : ""}${s.running ? " is-running" : ""}` });
       const tabIcon = tab.createSpan({ cls: `sa-tab-icon${this.isBusy(s) ? " is-busy" : ""}` });
       setIcon(tabIcon, AGENTS[s.st.agent]?.icon || "terminal");
       if (this.isBusy(s)) tabIcon.setAttr("aria-label", this.stateLabel(s));
@@ -587,6 +595,11 @@ export class AgentPanelView extends ItemView {
         m.showAtMouseEvent(ev);
       };
     }
+    // Redrawn every 30 s: keep the scroll position, but bring a newly activated tab into view.
+    strip.scrollLeft = keepScroll;
+    const act = strip.querySelector(".sa-tab.is-active");
+    if (act && this.activeShown !== this.active) act.scrollIntoView({ block: "nearest", inline: "nearest" });
+    this.activeShown = this.active;
   }
 
   renderInfo() {
@@ -894,8 +907,7 @@ export class AgentPanelView extends ItemView {
     else if (this.filter === "note") {
       const note = this.plugin.ctxPath;
       list = note ? list.filter((e) => store.touches(e, note)) : [];
-    }
-    else if (this.filter !== "all") list = list.filter((e) => e.agent === this.filter);
+    } else if (this.filter !== "all") list = list.filter((e) => e.agent === this.filter);
     // Searching finds real sessions only, not the chat notes from the vault (label "history")
     if (this.query) list = list.filter((e) => !e.archived && (store.matches(e, this.query) || (this.fulltext && this.ftKeys && this.ftKeys.has(e.key))));
     return { list, openKeys };
